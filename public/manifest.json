@@ -1,0 +1,36 @@
+{
+  "short_name": "NutriSnap",
+  "name": "NutriSnap – AI Nutrition Tracker",
+  "description": "Snap a photo of your meal and get instant AI-powered macro estimates. Track calories, protein, carbs and fat. Set daily goals and get smart nudges.",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1d9e75",
+  "background_color": "#ffffff",
+  "scope": "/",
+  "categories": ["health", "fitness", "food"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Log a meal",
+      "short_name": "Snap",
+      "description": "Quickly log a new meal",
+      "url": "/?tab=snap",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
