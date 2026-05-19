@@ -1,9 +1,14 @@
 const MODEL = 'claude-sonnet-4-20250514';
 
+function authHeaders() {
+  const token = localStorage.getItem('ns_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export async function analyzeFood(base64, mimeType) {
   const response = await fetch('/api/claude', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
       body: JSON.stringify({
       model: MODEL,
       max_tokens: 600,
@@ -35,7 +40,7 @@ export async function getNudge(todayTotals, goals) {
 
   const response = await fetch('/api/claude', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 80,
