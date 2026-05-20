@@ -181,7 +181,7 @@ export default function SnapView({ onSaved, logs = [] }) {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'inherit' }}>{meal.name}</div>
-                  <div style={{ fontSize: 11, color: '#aaa', marginTop: 2 }}>{meal.calories} kcal · {meal.protein}g protein</div>
+                  <div style={{ fontSize: 11, color: '#aaa', marginTop: 2 }}>{meal.calories} kcal · {meal.protein}g protein{meal.model && <> · <span style={{ fontFamily: 'monospace' }}>{meal.model}</span></>}</div>
                 </div>
                 <i className="ti ti-plus" style={{ fontSize: 18, color: '#1d9e75', flexShrink: 0 }} />
               </button>
@@ -213,8 +213,11 @@ export default function SnapView({ onSaved, logs = [] }) {
   return (
     <div style={s}>
       {imgUrl && <img src={imgUrl} alt="Food" style={{ width: '100%', borderRadius: 14, marginBottom: 16, maxHeight: 240, objectFit: 'cover' }} />}
-      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#e1f5ee', color: '#0f6e56', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, marginBottom: 14 }}>
-        <i className="ti ti-sparkles" style={{ fontSize: 11 }} />AI estimate — edit if needed
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#e1f5ee', color: '#0f6e56', fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6 }}>
+          <i className="ti ti-sparkles" style={{ fontSize: 11 }} />AI estimate — edit if needed
+        </div>
+        {modelUsed && <span style={{ fontSize: 10, color: '#bbb', fontFamily: 'monospace' }}>{modelUsed}</span>}
       </div>
       <input
         value={mealName} onChange={e => setMealName(e.target.value)}
