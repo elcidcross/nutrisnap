@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Chart, registerables } from 'chart.js';
 import { todayStr, swStart, smStart } from '../utils/date';
+import { goalsAtDate } from '../utils/storage';
 
 Chart.register(...registerables);
 
 const COLORS = { cal: '#1d9e75', protein: '#d4537e', carbs: '#378add', fat: '#ba7517' };
 
-export default function ReportView({ logs, goals }) {
+export default function ReportView({ logs, goalsHistory }) {
   const [period, setPeriod] = useState('day');
   const chartRef = useRef(null);
   const chartInst = useRef(null);
@@ -24,23 +25,33 @@ export default function ReportView({ logs, goals }) {
   const buildData = useCallback(() => {
     if (period === 'day') {
       const hrs = Array.from({ length: 24 }, (_, i) => i);
+      const dayGoal = goalsAtDate(Date.now(), goalsHistory).calories;
       return {
         labels: hrs.map(h => h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h - 12) + 'p'),
         data: hrs.map(h => logs.filter(l => new Date(l.timestamp).toDateString() === todayStr() && new Date(l.timestamp).getHours() === h).reduce((s, l) => s + (l.calories || 0), 0)),
+        goalData: hrs.map(() => dayGoal),
       };
     }
     if (period === 'week') {
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], start = swStart();
-      return { labels: days, data: days.map((_, i) => { const s = start + i * 86400000; return logs.filter(l => l.timestamp >= s && l.timestamp < s + 86400000).reduce((s, l) => s + (l.calories || 0), 0); }) };
+      return {
+        labels: days,
+        data: days.map((_, i) => { const s = start + i * 86400000; return logs.filter(l => l.timestamp >= s && l.timestamp < s + 86400000).reduce((s, l) => s + (l.calories || 0), 0); }),
+        goalData: days.map((_, i) => goalsAtDate(start + i * 86400000 + 43200000, goalsHistory).calories),
+      };
     }
     const dim = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate(), start = smStart();
-    return { labels: Array.from({ length: dim }, (_, i) => i + 1), data: Array.from({ length: dim }, (_, i) => { const s = start + i * 86400000; return logs.filter(l => l.timestamp >= s && l.timestamp < s + 86400000).reduce((s, l) => s + (l.calories || 0), 0); }) };
-  }, [logs, period]);
+    return {
+      labels: Array.from({ length: dim }, (_, i) => i + 1),
+      data: Array.from({ length: dim }, (_, i) => { const s = start + i * 86400000; return logs.filter(l => l.timestamp >= s && l.timestamp < s + 86400000).reduce((s, l) => s + (l.calories || 0), 0); }),
+      goalData: Array.from({ length: dim }, (_, i) => goalsAtDate(start + i * 86400000 + 43200000, goalsHistory).calories),
+    };
+  }, [logs, period, goalsHistory]);
 
   useEffect(() => {
     if (!chartRef.current) return;
     if (chartInst.current) chartInst.current.destroy();
-    const { labels, data } = buildData();
+    const { labels, data, goalData } = buildData();
     const isDark = matchMedia('(prefers-color-scheme:dark)').matches;
     chartInst.current = new Chart(chartRef.current, {
       type: 'bar',
@@ -48,7 +59,7 @@ export default function ReportView({ logs, goals }) {
         labels,
         datasets: [
           { label: 'Calories', data, backgroundColor: 'rgba(29,158,117,.65)', borderRadius: 4, borderSkipped: false },
-          { label: 'Goal', data: labels.map(() => goals.calories), type: 'line', borderColor: 'rgba(212,83,126,.55)', borderDash: [5, 3], borderWidth: 1.5, pointRadius: 0, fill: false },
+          { label: 'Goal', data: goalData, type: 'line', borderColor: 'rgba(212,83,126,.55)', borderDash: [5, 3], borderWidth: 1.5, pointRadius: 0, fill: false },
         ]
       },
       options: {
@@ -61,7 +72,7 @@ export default function ReportView({ logs, goals }) {
       }
     });
     return () => { if (chartInst.current) chartInst.current.destroy(); };
-  }, [buildData, period, goals.calories]);
+  }, [buildData, period]);
 
   return (
     <div>

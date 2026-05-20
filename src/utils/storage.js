@@ -1,6 +1,7 @@
 export const KEYS = {
   LOGS: 'nutrisnap_logs_v3',
   GOALS: 'nutrisnap_goals_v1',
+  GOALS_HISTORY: 'nutrisnap_goals_history_v1',
   NOTIF: 'nutrisnap_notif_v1',
   API_KEY: 'nutrisnap_api_key',
   API_PROVIDER: 'nutrisnap_api_provider',
@@ -16,4 +17,15 @@ export function load(key, fallback) {
 
 export function save(key, value) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+
+// Returns goals active at the given timestamp (history array sorted ascending by timestamp)
+export function goalsAtDate(ts, history) {
+  let result = null;
+  for (const snap of history) {
+    if (snap.timestamp <= ts) result = snap;
+    else break;
+  }
+  if (!result) return DEFAULT_GOALS;
+  return { calories: result.calories, protein: result.protein, carbs: result.carbs, fat: result.fat };
 }

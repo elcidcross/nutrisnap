@@ -12,6 +12,12 @@ export default function App() {
   const [tab, setTab] = useState('log');
   const [logs, setLogs] = useState(() => load(KEYS.LOGS, []));
   const [goals, setGoals] = useState(() => load(KEYS.GOALS, DEFAULT_GOALS));
+  const [goalsHistory, setGoalsHistory] = useState(() => {
+    const h = load(KEYS.GOALS_HISTORY, null);
+    if (h) return h;
+    const g = load(KEYS.GOALS, DEFAULT_GOALS);
+    return [{ timestamp: 0, ...g }];
+  });
   const [notif, setNotif] = useState(() => load(KEYS.NOTIF, DEFAULT_NOTIF));
 
   // Lock again if the proxy ever rejects the stored password
@@ -22,6 +28,7 @@ export default function App() {
   }, []);
 
   useEffect(() => save(KEYS.LOGS, logs), [logs]);
+  useEffect(() => save(KEYS.GOALS_HISTORY, goalsHistory), [goalsHistory]);
 
   const todayTotals = useMemo(() => {
     return logs
@@ -102,8 +109,8 @@ export default function App() {
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 80 }}>
         {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={id => setLogs(p => p.filter(l => l.id !== id))} onEdit={(id, updates) => setLogs(p => p.map(l => l.id === id ? { ...l, ...updates } : l))} />}
         {tab === 'snap' && <SnapView logs={logs} onSaved={entry => { setLogs(p => [entry, ...p]); setTab('log'); }} />}
-        {tab === 'report' && <ReportView logs={logs} goals={goals} />}
-        {tab === 'settings' && <SettingsView goals={goals} setGoals={setGoals} notif={notif} setNotif={setNotif} />}
+        {tab === 'report' && <ReportView logs={logs} goalsHistory={goalsHistory} />}
+        {tab === 'settings' && <SettingsView goals={goals} setGoals={setGoals} notif={notif} setNotif={setNotif} goalsHistory={goalsHistory} setGoalsHistory={setGoalsHistory} />}
       </div>
 
       {/* Bottom nav */}

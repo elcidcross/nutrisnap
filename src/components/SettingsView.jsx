@@ -33,8 +33,16 @@ function Toggle({ on, onToggle, label }) {
   );
 }
 
-export default function SettingsView({ goals, setGoals, notif, setNotif }) {
-  const saveGoal = (field, val) => { const g = { ...goals, [field]: val }; setGoals(g); save(KEYS.GOALS, g); };
+export default function SettingsView({ goals, setGoals, notif, setNotif, goalsHistory, setGoalsHistory }) {
+  const saveGoal = (field, val) => {
+    const g = { ...goals, [field]: val };
+    setGoals(g);
+    save(KEYS.GOALS, g);
+    const snap = { timestamp: Date.now(), ...g };
+    const newHistory = [...goalsHistory, snap];
+    setGoalsHistory(newHistory);
+    save(KEYS.GOALS_HISTORY, newHistory);
+  };
   const updateNotif = patch => { const n = { ...notif, ...patch }; setNotif(n); save(KEYS.NOTIF, n); };
 
   const [provider, setProvider] = React.useState(() => localStorage.getItem(KEYS.API_PROVIDER) || 'anthropic');
