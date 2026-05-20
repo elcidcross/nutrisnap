@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { analyzeFood } from '../utils/api';
+import { analyzeFood, analyzeFoodText } from '../utils/api';
 
 const COLORS = { cal: '#1d9e75', protein: '#d4537e', carbs: '#378add', fat: '#ba7517', fiber: '#639922' };
 
@@ -11,6 +11,7 @@ export default function SnapView({ onSaved }) {
   const [macros, setMacros] = useState(null);
   const [mealName, setMealName] = useState('');
   const [err, setErr] = useState(null);
+  const [textInput, setTextInput] = useState('');
 
   const handleFile = e => {
     const f = e.target.files[0]; if (!f) return;
@@ -44,7 +45,25 @@ export default function SnapView({ onSaved }) {
     reset();
   };
 
-  const reset = () => { setState('idle'); setImgUrl(null); setImgB64(null); setMacros(null); setMealName(''); setErr(null); };
+  const analyzeText = async () => {
+    if (!localStorage.getItem('nutrisnap_api_key')) {
+      setErr('No API key set. Go to Goals & Settings → AI Provider to add one.');
+      return;
+    }
+    if (!textInput.trim()) return;
+    setState('analyzing'); setErr(null);
+    try {
+      const res = await analyzeFoodText(textInput.trim());
+      setMacros({ calories: res.calories || 0, protein: res.protein || 0, carbs: res.carbs || 0, fat: res.fat || 0, fiber: res.fiber || 0 });
+      setMealName(res.name || textInput.trim());
+      setState('review');
+    } catch (e) {
+      setErr(e.message || 'Could not analyze. Please try again.');
+      setState('idle');
+    }
+  };
+
+  const reset = () => { setState('idle'); setImgUrl(null); setImgB64(null); setMacros(null); setMealName(''); setErr(null); setTextInput(''); };
 
   const s = { padding: '20px' };
 
@@ -58,8 +77,42 @@ export default function SnapView({ onSaved }) {
         AI estimates calories and macronutrients instantly from a photo
       </p>
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#e1f5ee', color: '#0f6e56', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 7, marginBottom: 20 }}>
-        <i className="ti ti-sparkles" style={{ fontSize: 13 }} />Powered by Claude AI
+        <i className="ti ti-sparkles" style={{ fontSize: 13 }} />Powered by AI
       </div>
+
+      {/* Text input */}
+      <div style={{ width: '100%', display: 'flex', gap: 8, marginBottom: 16 }}>
+        <input
+          type="text"
+          value={textInput}
+          onChange={e => { setTextInput(e.target.value); setErr(null); }}
+          onKeyDown={e => e.key === 'Enter' && analyzeText()}
+          placeholder="e.g. large pepperoni pizza slice"
+          style={{
+            flex: 1, padding: '13px 14px', fontSize: 14, borderRadius: 12,
+            border: '1.5px solid rgba(0,0,0,.15)', background: '#fafaf8',
+            outline: 'none', color: 'inherit',
+          }}
+        />
+        <button onClick={analyzeText} disabled={!textInput.trim()}
+          style={{
+            padding: '0 16px', borderRadius: 12, border: 'none',
+            background: textInput.trim() ? '#1d9e75' : '#ccc',
+            color: '#fff', fontSize: 20, cursor: textInput.trim() ? 'pointer' : 'not-allowed',
+            display: 'flex', alignItems: 'center',
+          }}>
+          <i className="ti ti-arrow-right" />
+        </button>
+      </div>
+
+      {err && <p style={{ color: '#e24b4a', fontSize: 13, textAlign: 'center', marginBottom: 12, width: '100%' }}>{err}</p>}
+
+      <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+        <div style={{ flex: 1, height: '0.5px', background: 'rgba(0,0,0,.1)' }} />
+        <span style={{ fontSize: 12, color: '#bbb', fontWeight: 600 }}>OR</span>
+        <div style={{ flex: 1, height: '0.5px', background: 'rgba(0,0,0,.1)' }} />
+      </div>
+
       <label style={{ width: '100%', cursor: 'pointer', marginBottom: 10 }}>
         <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleFile} />
         <div style={{ width: '100%', padding: 14, borderRadius: 12, fontSize: 15, fontWeight: 700, border: 'none', background: '#1d9e75', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>

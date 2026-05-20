@@ -62,6 +62,24 @@ export async function analyzeFood(base64, mimeType) {
   throw new Error(`AI returned unexpected response: ${raw.slice(0, 120)}`);
 }
 
+export async function analyzeFoodText(description) {
+  const data = await callClaude({
+    model: getModel(),
+    max_tokens: 2048,
+    messages: [{
+      role: 'user',
+      content: `Analyze this meal description and estimate its nutrition. You must respond with ONLY a raw JSON object — no explanation, no markdown, no extra text whatsoever. Format: {"name":"short name max 5 words","calories":integer,"protein":decimal,"carbs":decimal,"fat":decimal,"fiber":decimal}. Meal: ${description}`
+    }]
+  });
+  const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+  const normalized = raw.replace(/'([^']*)'/g, '"$1"');
+  for (const candidate of [raw, normalized, raw.match(/\{[\s\S]*\}/)?.[0], normalized.match(/\{[\s\S]*\}/)?.[0]]) {
+    if (!candidate) continue;
+    try { return JSON.parse(candidate); } catch {}
+  }
+  throw new Error(`AI returned unexpected response: ${raw.slice(0, 120)}`);
+}
+
 export async function getNudge(todayTotals, goals) {
   const gaps = {};
   if (goals.calories - todayTotals.calories > 100) gaps.calories = Math.round(goals.calories - todayTotals.calories);
