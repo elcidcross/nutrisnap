@@ -1,27 +1,40 @@
 const MODEL = 'claude-sonnet-4-20250514';
+const PROXY = '/api/claude';
 
-function authHeaders() {
-  const token = localStorage.getItem('ns_token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+// Password is stored in localStorage after the user unlocks the app.
+// It's sent with every request to the proxy, which validates it server-side.
+function getPassword() {
+  return localStorage.getItem('nutrisnap_auth') || '';
+}
+
+async function callClaude(body) {
+  const response = await fetch(PROXY, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...body, _password: getPassword() }),
+  });
+  if (response.status === 401) {
+    // Clear invalid password so the lock screen re-appears
+    localStorage.removeItem('nutrisnap_auth');
+    window.dispatchEvent(new Event('nutrisnap_unauthorized'));
+    throw new Error('Unauthorized');
+  }
+  if (!response.ok) throw new Error(`Proxy error ${response.status}`);
+  return response.json();
 }
 
 export async function analyzeFood(base64, mimeType) {
-  const response = await fetch('/api/claude', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-      body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 600,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-          { type: 'text', text: 'Analyze this food image. Return ONLY valid JSON (no markdown): {"name":"short name max 5 words","calories":integer,"protein":decimal,"carbs":decimal,"fat":decimal,"fiber":decimal}. Estimate for a typical single serving.' }
-        ]
-      }]
-    })
+  const data = await callClaude({
+    model: MODEL,
+    max_tokens: 600,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+        { type: 'text', text: 'Analyze this food image. Return ONLY valid JSON (no markdown): {"name":"short name max 5 words","calories":integer,"protein":decimal,"carbs":decimal,"fat":decimal,"fiber":decimal}. Estimate for a typical single serving.' }
+      ]
+    }]
   });
-  const data = await response.json();
   const text = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
   return JSON.parse(text);
 }
@@ -38,15 +51,10 @@ export async function getNudge(todayTotals, goals) {
   const mealCtx = hour < 11 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 19 ? 'afternoon snack' : 'dinner';
   const prompt = `User nutrition gaps today: ${JSON.stringify(gaps)}. Meal context: ${mealCtx}. Write a single short, friendly, specific nudge (1-2 sentences, max 30 words) suggesting a specific food to eat RIGHT NOW to close the most important gap. Be direct and concrete like: "You need 25g more protein — grab a boiled egg and some chicken breast now!" Return ONLY the nudge text.`;
 
-  const response = await fetch('/api/claude', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...authHeaders() },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 80,
-      messages: [{ role: 'user', content: prompt }]
-    })
+  const data = await callClaude({
+    model: MODEL,
+    max_tokens: 80,
+    messages: [{ role: 'user', content: prompt }]
   });
-  const data = await response.json();
   return { text: data.content.map(b => b.text || '').join('').trim(), gaps };
 }

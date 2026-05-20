@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import LockScreen from './components/LockScreen';
 import LogView from './components/LogView';
 import SnapView from './components/SnapView';
 import ReportView from './components/ReportView';
@@ -7,10 +8,18 @@ import { load, save, KEYS, DEFAULT_GOALS, DEFAULT_NOTIF } from './utils/storage'
 import { todayStr } from './utils/date';
 
 export default function App() {
+  const [unlocked, setUnlocked] = useState(() => !!localStorage.getItem('nutrisnap_auth'));
   const [tab, setTab] = useState('log');
   const [logs, setLogs] = useState(() => load(KEYS.LOGS, []));
   const [goals, setGoals] = useState(() => load(KEYS.GOALS, DEFAULT_GOALS));
   const [notif, setNotif] = useState(() => load(KEYS.NOTIF, DEFAULT_NOTIF));
+
+  // Lock again if the proxy ever rejects the stored password
+  useEffect(() => {
+    const handler = () => setUnlocked(false);
+    window.addEventListener('nutrisnap_unauthorized', handler);
+    return () => window.removeEventListener('nutrisnap_unauthorized', handler);
+  }, []);
 
   useEffect(() => save(KEYS.LOGS, logs), [logs]);
 
@@ -49,6 +58,8 @@ export default function App() {
     }, 60000);
     return () => clearInterval(interval);
   }, [notif, goals, todayTotals]);
+
+  if (!unlocked) return <LockScreen onUnlock={() => setUnlocked(true)} />;
 
   const TABS = [
     { id: 'log', icon: 'ti-list', label: 'Log' },
@@ -98,9 +109,13 @@ export default function App() {
       <nav style={{
         position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
         width: '100%', maxWidth: 430, background: '#fff',
-        borderTop: '0.5px solid rgba(0,0,0,.1)', display: 'flex', zIndex: 20,
-        paddingBottom: 'env(safe-area-inset-bottom)',
+        borderTop: '0.5px solid rgba(0,0,0,.1)', display: 'flex', flexDirection: 'column',
+        zIndex: 20, paddingBottom: 'env(safe-area-inset-bottom)',
       }} aria-label="Main navigation">
+        <div style={{ textAlign: 'center', fontSize: 9, color: '#ccc', padding: '3px 0 0' }}>
+          Built {process.env.REACT_APP_BUILD_TIME || 'dev'}
+        </div>
+        <div style={{ display: 'flex' }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
             aria-current={tab === t.id ? 'page' : undefined}
@@ -135,6 +150,7 @@ export default function App() {
             {t.label}
           </button>
         ))}
+        </div>
       </nav>
     </div>
   );

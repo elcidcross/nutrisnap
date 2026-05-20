@@ -1,14 +1,14 @@
 functionsDirectory = "/home/elcidx/Projects/nutrisnap/netlify/functions"
 functionsDirectoryOrigin = "config-v1"
+redirectsOrigin = "config"
 plugins = []
 headers = []
-redirects = []
 
 [build]
 publish = "/home/elcidx/Projects/nutrisnap/build"
 publishOrigin = "config"
 commandOrigin = "config"
-command = "npm run build"
+command = "REACT_APP_BUILD_TIME=$(date -u '+%Y-%m-%d %H:%M UTC') npm run build"
 functions = "/home/elcidx/Projects/nutrisnap/netlify/functions"
 
 [build.environment]
@@ -28,3 +28,15 @@ functions = "/home/elcidx/Projects/nutrisnap/netlify/functions"
 [functions]
 
 [functions."*"]
+
+[[redirects]]
+from = "/api/claude"
+to = "/.netlify/functions/claude"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
