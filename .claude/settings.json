@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m ' *)",
+      "Bash(curl -s http://localhost:8888)",
+      "Bash(netlify dev *)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(vercel --prod)"
+    ]
+  }
+}
