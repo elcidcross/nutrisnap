@@ -73,10 +73,10 @@ function toGeminiParts(content) {
   });
 }
 
-async function callGemini(apiKey, body, jsonResponse) {
+async function callGeminiModel(apiKey, model, body, jsonResponse) {
   const parts = body.messages.flatMap(m => toGeminiParts(m.content));
   const r = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${body.model}:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -90,4 +90,14 @@ async function callGemini(apiKey, body, jsonResponse) {
   if (!r.ok) throw Object.assign(new Error(data.error?.message || 'Gemini error'), { status: r.status });
   const responseParts = data.candidates?.[0]?.content?.parts || [];
   return { content: [{ type: 'text', text: responseParts.map(p => p.text || '').join('') }] };
+}
+
+async function callGemini(apiKey, body, jsonResponse) {
+  const fallback = body.model === 'gemini-3.5-flash' ? 'gemini-2.5-flash' : null;
+  try {
+    return await callGeminiModel(apiKey, body.model, body, jsonResponse);
+  } catch (err) {
+    if (err.status === 503 && fallback) return callGeminiModel(apiKey, fallback, body, jsonResponse);
+    throw err;
+  }
 }
