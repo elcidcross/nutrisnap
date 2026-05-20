@@ -44,6 +44,7 @@ export async function analyzeFood(base64, mimeType) {
   const data = await callClaude({
     model: getModel(),
     max_tokens: 2048,
+    _jsonResponse: true,
     messages: [{
       role: 'user',
       content: [
@@ -66,6 +67,7 @@ export async function analyzeFoodText(description) {
   const data = await callClaude({
     model: getModel(),
     max_tokens: 2048,
+    _jsonResponse: true,
     messages: [{
       role: 'user',
       content: `Analyze this meal description and estimate its nutrition. You must respond with ONLY a raw JSON object — no explanation, no markdown, no extra text whatsoever. Format: {"name":"short name max 5 words","calories":integer,"protein":decimal,"carbs":decimal,"fat":decimal,"fiber":decimal}. Meal: ${description}`
@@ -94,7 +96,7 @@ export async function getNudge(todayTotals, goals) {
 
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 80,
+    max_tokens: 200,
     messages: [{ role: 'user', content: prompt }]
   });
   return { text: data.content.map(b => b.text || '').join('').trim(), gaps };

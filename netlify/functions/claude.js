@@ -30,12 +30,12 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'No API key configured. Add one in Settings.' }) };
   }
 
-  const { _password, _userApiKey, _provider, ...aiBody } = body;
+  const { _password, _userApiKey, _provider, _jsonResponse, ...aiBody } = body;
 
   try {
     let result;
     if (provider === 'openai') result = await callOpenAI(apiKey, aiBody);
-    else if (provider === 'gemini') result = await callGemini(apiKey, aiBody);
+    else if (provider === 'gemini') result = await callGemini(apiKey, aiBody, _jsonResponse);
     else result = await callAnthropic(apiKey, aiBody);
 
     return {
@@ -102,7 +102,7 @@ function toGeminiParts(content) {
   });
 }
 
-async function callGemini(apiKey, body) {
+async function callGemini(apiKey, body, jsonResponse) {
   const parts = body.messages.flatMap(m => toGeminiParts(m.content));
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${body.model}:generateContent?key=${apiKey}`,
@@ -111,7 +111,7 @@ async function callGemini(apiKey, body) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts }],
-        generationConfig: { maxOutputTokens: body.max_tokens, responseMimeType: 'application/json' },
+        generationConfig: { maxOutputTokens: body.max_tokens, ...(jsonResponse && { responseMimeType: 'application/json' }) },
       }),
     }
   );
