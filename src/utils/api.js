@@ -43,7 +43,7 @@ function getModel() {
 export async function analyzeFood(base64, mimeType) {
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 1024,
+    max_tokens: 2048,
     messages: [{
       role: 'user',
       content: [
