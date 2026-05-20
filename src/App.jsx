@@ -99,7 +99,7 @@ export default function App() {
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 80 }}>
-        {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={id => setLogs(p => p.filter(l => l.id !== id))} />}
+        {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={id => setLogs(p => p.filter(l => l.id !== id))} onEdit={(id, updates) => setLogs(p => p.map(l => l.id === id ? { ...l, ...updates } : l))} />}
         {tab === 'snap' && <SnapView onSaved={entry => { setLogs(p => [entry, ...p]); setTab('log'); }} />}
         {tab === 'report' && <ReportView logs={logs} goals={goals} />}
         {tab === 'settings' && <SettingsView goals={goals} setGoals={setGoals} notif={notif} setNotif={setNotif} />}

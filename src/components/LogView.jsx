@@ -7,7 +7,7 @@ import { todayStr, fmtTime, fmtDate } from '../utils/date';
 
 const COLORS = { cal: '#1d9e75', protein: '#d4537e', carbs: '#378add', fat: '#ba7517' };
 
-export default function LogView({ logs, goals, onDelete }) {
+export default function LogView({ logs, goals, onDelete, onEdit }) {
   const todayLogs = logs.filter(l => new Date(l.timestamp).toDateString() === todayStr());
   const totals = todayLogs.reduce((a, l) => ({
     calories: a.calories + (l.calories || 0),
@@ -86,7 +86,7 @@ export default function LogView({ logs, goals, onDelete }) {
               <div style={{ padding: '10px 16px 6px', fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '.5px', background: '#f5f5f0' }}>
                 {day === todayStr() ? 'Today' : fmtDate(entries[0].timestamp)}
               </div>
-              {entries.map(entry => <LogEntry key={entry.id} entry={entry} onDelete={onDelete} />)}
+              {entries.map(entry => <LogEntry key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} />)}
             </div>
           ))
       }
@@ -94,7 +94,46 @@ export default function LogView({ logs, goals, onDelete }) {
   );
 }
 
-function LogEntry({ entry, onDelete }) {
+function LogEntry({ entry, onDelete, onEdit }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({});
+
+  const startEdit = () => {
+    setDraft({ name: entry.name, calories: entry.calories, protein: entry.protein, carbs: entry.carbs, fat: entry.fat });
+    setEditing(true);
+  };
+
+  const save = () => {
+    onEdit(entry.id, { name: draft.name, calories: +draft.calories, protein: +draft.protein, carbs: +draft.carbs, fat: +draft.fat });
+    setEditing(false);
+  };
+
+  const field = (label, key, color) => (
+    <div style={{ flex: 1 }}>
+      <div style={{ fontSize: 10, color, fontWeight: 700, marginBottom: 3 }}>{label}</div>
+      <input type="number" value={draft[key]} min={0} step={0.1}
+        onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
+        style={{ width: '100%', fontSize: 14, fontWeight: 700, border: 'none', borderBottom: `2px solid ${color}`, background: 'transparent', outline: 'none', color: 'inherit', paddingBottom: 2 }} />
+    </div>
+  );
+
+  if (editing) return (
+    <div style={{ padding: '14px 16px', borderBottom: '0.5px solid rgba(0,0,0,.07)', background: '#fafaf8' }}>
+      <input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
+        style={{ width: '100%', fontSize: 15, fontWeight: 700, border: 'none', borderBottom: '2px solid #1d9e75', background: 'transparent', outline: 'none', color: 'inherit', paddingBottom: 4, marginBottom: 14, boxSizing: 'border-box' }} />
+      <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+        {field('CALORIES', 'calories', '#1d9e75')}
+        {field('PROTEIN', 'protein', '#d4537e')}
+        {field('CARBS', 'carbs', '#378add')}
+        {field('FAT', 'fat', '#ba7517')}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button onClick={save} style={{ flex: 1, padding: '10px 0', borderRadius: 10, fontSize: 13, fontWeight: 700, border: 'none', background: '#1d9e75', color: '#fff', cursor: 'pointer' }}>Save</button>
+        <button onClick={() => setEditing(false)} style={{ flex: 1, padding: '10px 0', borderRadius: 10, fontSize: 13, fontWeight: 700, border: 'none', background: '#f0f0ea', cursor: 'pointer' }}>Cancel</button>
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ padding: '14px 16px', borderBottom: '0.5px solid rgba(0,0,0,.07)', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
       <div style={{ width: 54, height: 54, borderRadius: 10, overflow: 'hidden', background: '#f0f0ea', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -115,6 +154,10 @@ function LogEntry({ entry, onDelete }) {
         </div>
       </div>
       <span style={{ fontSize: 14, fontWeight: 700, color: '#888', marginLeft: 'auto', flexShrink: 0 }}>{entry.calories} kcal</span>
+      <button onClick={startEdit} aria-label="Edit entry"
+        style={{ background: 'none', border: 'none', color: '#ccc', fontSize: 17, padding: 4, flexShrink: 0, cursor: 'pointer' }}>
+        <i className="ti ti-pencil" />
+      </button>
       <button onClick={() => onDelete(entry.id)} aria-label="Delete entry"
         style={{ background: 'none', border: 'none', color: '#ccc', fontSize: 17, padding: 4, flexShrink: 0, cursor: 'pointer' }}>
         <i className="ti ti-trash" />
