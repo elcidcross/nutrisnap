@@ -38,10 +38,12 @@ exports.handler = async (event) => {
     else if (provider === 'gemini') result = await callGemini(apiKey, aiBody, _jsonResponse);
     else result = await callAnthropic(apiKey, aiBody);
 
+    const _modelUsed = result._modelUsed || aiBody.model;
+    const { _modelUsed: _, ...clean } = result;
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      body: JSON.stringify(result),
+      body: JSON.stringify({ ...clean, _modelUsed }),
     };
   } catch (err) {
     return {
@@ -124,9 +126,13 @@ async function callGeminiModel(apiKey, model, body, jsonResponse) {
 async function callGemini(apiKey, body, jsonResponse) {
   const fallback = body.model === 'gemini-3.5-flash' ? 'gemini-2.5-flash' : null;
   try {
-    return await callGeminiModel(apiKey, body.model, body, jsonResponse);
+    const result = await callGeminiModel(apiKey, body.model, body, jsonResponse);
+    return { ...result, _modelUsed: body.model };
   } catch (err) {
-    if (err.status === 503 && fallback) return callGeminiModel(apiKey, fallback, body, jsonResponse);
+    if (err.status === 503 && fallback) {
+      const result = await callGeminiModel(apiKey, fallback, body, jsonResponse);
+      return { ...result, _modelUsed: fallback };
+    }
     throw err;
   }
 }

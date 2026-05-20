@@ -65,7 +65,7 @@ export async function analyzeFood(base64, mimeType) {
   const normalized = raw.replace(/'([^']*)'/g, '"$1"');
   for (const candidate of [raw, normalized, raw.match(/\{[\s\S]*\}/)?.[0], normalized.match(/\{[\s\S]*\}/)?.[0]]) {
     if (!candidate) continue;
-    try { return JSON.parse(candidate); } catch {}
+    try { return { ...JSON.parse(candidate), _modelUsed: data._modelUsed }; } catch {}
   }
   throw new Error(`AI returned unexpected response: ${raw.slice(0, 120)}`);
 }
@@ -84,7 +84,7 @@ export async function analyzeFoodText(description) {
   const normalized = raw.replace(/'([^']*)'/g, '"$1"');
   for (const candidate of [raw, normalized, raw.match(/\{[\s\S]*\}/)?.[0], normalized.match(/\{[\s\S]*\}/)?.[0]]) {
     if (!candidate) continue;
-    try { return JSON.parse(candidate); } catch {}
+    try { return { ...JSON.parse(candidate), _modelUsed: data._modelUsed }; } catch {}
   }
   throw new Error(`AI returned unexpected response: ${raw.slice(0, 120)}`);
 }

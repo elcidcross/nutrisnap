@@ -13,6 +13,7 @@ export default function SnapView({ onSaved, logs = [] }) {
   const [mealName, setMealName] = useState('');
   const [err, setErr] = useState(null);
   const [textInput, setTextInput] = useState('');
+  const [modelUsed, setModelUsed] = useState(null);
 
   const makeThumbnail = (objectUrl) => new Promise(resolve => {
     const img = new Image();
@@ -53,6 +54,7 @@ export default function SnapView({ onSaved, logs = [] }) {
       const res = await analyzeFood(imgB64, imgMime);
       setMacros({ calories: res.calories || 0, protein: res.protein || 0, carbs: res.carbs || 0, fat: res.fat || 0, fiber: res.fiber || 0 });
       setMealName(res.name || 'Meal');
+      setModelUsed(res._modelUsed || null);
       setState('review');
     } catch (e) {
       setErr(e.message || 'Could not analyze image. Please try again.');
@@ -61,7 +63,7 @@ export default function SnapView({ onSaved, logs = [] }) {
   };
 
   const confirm = () => {
-    onSaved({ id: Date.now().toString(36) + Math.random().toString(36).slice(2), timestamp: Date.now(), name: mealName, imageUrl: imgThumb || imgUrl, ...macros });
+    onSaved({ id: Date.now().toString(36) + Math.random().toString(36).slice(2), timestamp: Date.now(), name: mealName, imageUrl: imgThumb || imgUrl, model: modelUsed, ...macros });
     reset();
   };
 
@@ -76,6 +78,7 @@ export default function SnapView({ onSaved, logs = [] }) {
       const res = await analyzeFoodText(textInput.trim());
       setMacros({ calories: res.calories || 0, protein: res.protein || 0, carbs: res.carbs || 0, fat: res.fat || 0, fiber: res.fiber || 0 });
       setMealName(res.name || textInput.trim());
+      setModelUsed(res._modelUsed || null);
       setState('review');
     } catch (e) {
       setErr(e.message || 'Could not analyze. Please try again.');
@@ -83,7 +86,7 @@ export default function SnapView({ onSaved, logs = [] }) {
     }
   };
 
-  const reset = () => { setState('idle'); setImgUrl(null); setImgThumb(null); setImgB64(null); setMacros(null); setMealName(''); setErr(null); setTextInput(''); };
+  const reset = () => { setState('idle'); setImgUrl(null); setImgThumb(null); setImgB64(null); setMacros(null); setMealName(''); setErr(null); setTextInput(''); setModelUsed(null); };
 
   // Deduplicated recent meals — latest entry per unique name, up to 5
   const recentMeals = (() => {
