@@ -1,3 +1,22 @@
 {
-	"siteId": "9fde2487-9057-40cc-9bee-e438cc3f2f7a"
+	"siteId": "9fde2487-9057-40cc-9bee-e438cc3f2f7a",
+	"geolocation": {
+		"data": {
+			"city": "Funabashi",
+			"country": {
+				"code": "JP",
+				"name": "Japan"
+			},
+			"subdivision": {
+				"code": "12",
+				"name": "Chiba"
+			},
+			"timezone": "Asia/Tokyo",
+			"latitude": 35.7025,
+			"longitude": 139.997,
+			"postalCode": "273-0001"
+		},
+		"timestamp": 1779288688975
+	},
+	"dbConnectionString": "postgres://localhost:38645/postgres"
 }
