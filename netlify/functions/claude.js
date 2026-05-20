@@ -111,13 +111,14 @@ async function callGemini(apiKey, body) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts }],
-        generationConfig: { maxOutputTokens: body.max_tokens },
+        generationConfig: { maxOutputTokens: body.max_tokens, responseMimeType: 'application/json' },
       }),
     }
   );
   const data = await res.json();
   if (!res.ok) throw Object.assign(new Error(data.error?.message || 'Gemini error'), { status: res.status });
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  const responseParts = data.candidates?.[0]?.content?.parts || [];
+  const text = responseParts.map(p => p.text || '').join('');
   // Normalize to Anthropic response shape
   return { content: [{ type: 'text', text }] };
 }

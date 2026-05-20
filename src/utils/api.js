@@ -15,7 +15,7 @@ function getApiMeta() {
 const MODELS = {
   anthropic: 'claude-haiku-4-5-20251001',
   openai: 'gpt-4o-mini',
-  gemini: 'gemini-1.5-flash',
+  gemini: 'gemini-3.5-flash',
 };
 
 async function callClaude(body) {
@@ -30,8 +30,9 @@ async function callClaude(body) {
     window.dispatchEvent(new Event('nutrisnap_unauthorized'));
     throw new Error('Unauthorized');
   }
-  if (!response.ok) throw new Error(`Proxy error ${response.status}`);
-  return response.json();
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || `Server error ${response.status}`);
+  return data;
 }
 
 function getModel() {
@@ -42,17 +43,23 @@ function getModel() {
 export async function analyzeFood(base64, mimeType) {
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 600,
+    max_tokens: 1024,
     messages: [{
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-        { type: 'text', text: 'Analyze this food image. Return ONLY valid JSON (no markdown): {"name":"short name max 5 words","calories":integer,"protein":decimal,"carbs":decimal,"fat":decimal,"fiber":decimal}. Estimate for a typical single serving.' }
+        { type: 'text', text: 'Analyze this food image. You must respond with ONLY a raw JSON object — no explanation, no markdown, no extra text whatsoever. Format: {"name":"short name max 5 words","calories":integer,"protein":decimal,"carbs":decimal,"fat":decimal,"fiber":decimal}. Estimate for a typical single serving.' }
       ]
     }]
   });
-  const text = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
-  return JSON.parse(text);
+  const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+  // Normalise single-quoted keys/values to double quotes, then try multiple parse strategies
+  const normalized = raw.replace(/'([^']*)'/g, '"$1"');
+  for (const candidate of [raw, normalized, raw.match(/\{[\s\S]*\}/)?.[0], normalized.match(/\{[\s\S]*\}/)?.[0]]) {
+    if (!candidate) continue;
+    try { return JSON.parse(candidate); } catch {}
+  }
+  throw new Error(`AI returned unexpected response: ${raw.slice(0, 120)}`);
 }
 
 export async function getNudge(todayTotals, goals) {
