@@ -3,7 +3,7 @@ import { analyzeFood, analyzeFoodText } from '../utils/api';
 
 const COLORS = { cal: '#1d9e75', protein: '#d4537e', carbs: '#378add', fat: '#ba7517', fiber: '#639922' };
 
-export default function SnapView({ onSaved }) {
+export default function SnapView({ onSaved, logs = [] }) {
   const [state, setState] = useState('idle');
   const [imgUrl, setImgUrl] = useState(null);
   const [imgThumb, setImgThumb] = useState(null);
@@ -85,6 +85,19 @@ export default function SnapView({ onSaved }) {
 
   const reset = () => { setState('idle'); setImgUrl(null); setImgThumb(null); setImgB64(null); setMacros(null); setMealName(''); setErr(null); setTextInput(''); };
 
+  // Deduplicated recent meals — latest entry per unique name, up to 5
+  const recentMeals = (() => {
+    const seen = new Set();
+    return [...logs].sort((a, b) => b.timestamp - a.timestamp).filter(l => {
+      if (seen.has(l.name)) return false;
+      seen.add(l.name); return true;
+    }).slice(0, 5);
+  })();
+
+  const relog = (meal) => {
+    onSaved({ id: Date.now().toString(36) + Math.random().toString(36).slice(2), timestamp: Date.now(), name: meal.name, imageUrl: meal.imageUrl, calories: meal.calories, protein: meal.protein, carbs: meal.carbs, fat: meal.fat, fiber: meal.fiber || 0 });
+  };
+
   const s = { padding: '20px' };
 
   if (state === 'idle') return (
@@ -145,6 +158,34 @@ export default function SnapView({ onSaved }) {
           <i className="ti ti-photo" />Choose from gallery
         </div>
       </label>
+
+      {/* Recent meals */}
+      {recentMeals.length > 0 && (
+        <>
+          <div style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, margin: '20px 0 14px' }}>
+            <div style={{ flex: 1, height: '0.5px', background: 'rgba(0,0,0,.1)' }} />
+            <span style={{ fontSize: 12, color: '#bbb', fontWeight: 600 }}>RECENT</span>
+            <div style={{ flex: 1, height: '0.5px', background: 'rgba(0,0,0,.1)' }} />
+          </div>
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {recentMeals.map(meal => (
+              <button key={meal.id} onClick={() => relog(meal)}
+                style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: '0.5px solid rgba(0,0,0,.1)', background: '#fafaf8', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' }}>
+                <div style={{ width: 40, height: 40, borderRadius: 8, overflow: 'hidden', background: '#f0f0ea', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {meal.imageUrl
+                    ? <img src={meal.imageUrl} alt={meal.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <i className="ti ti-salad" style={{ fontSize: 18, color: '#ccc' }} />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'inherit' }}>{meal.name}</div>
+                  <div style={{ fontSize: 11, color: '#aaa', marginTop: 2 }}>{meal.calories} kcal · {meal.protein}g protein</div>
+                </div>
+                <i className="ti ti-plus" style={{ fontSize: 18, color: '#1d9e75', flexShrink: 0 }} />
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 
