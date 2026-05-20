@@ -18,21 +18,28 @@ const MODELS = {
   gemini: 'gemini-3.5-flash',
 };
 
-async function callClaude(body) {
+async function callClaude(body, retries = 2) {
   const { _provider, _userApiKey } = getApiMeta();
-  const response = await fetch(PROXY, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, _password: getPassword(), _provider, _userApiKey }),
-  });
-  if (response.status === 401) {
-    localStorage.removeItem('nutrisnap_auth');
-    window.dispatchEvent(new Event('nutrisnap_unauthorized'));
-    throw new Error('Unauthorized');
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const response = await fetch(PROXY, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...body, _password: getPassword(), _provider, _userApiKey }),
+    });
+    if (response.status === 401) {
+      localStorage.removeItem('nutrisnap_auth');
+      window.dispatchEvent(new Event('nutrisnap_unauthorized'));
+      throw new Error('Unauthorized');
+    }
+    // Retry on rate-limit / overload errors
+    if ((response.status === 429 || response.status === 529 || response.status === 503) && attempt < retries) {
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+      continue;
+    }
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || `Server error ${response.status}`);
+    return data;
   }
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `Server error ${response.status}`);
-  return data;
 }
 
 function getModel() {
