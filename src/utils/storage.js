@@ -2,6 +2,8 @@ export const KEYS = {
   LOGS: 'nutrisnap_logs_v3',
   GOALS: 'nutrisnap_goals_v1',
   NOTIF: 'nutrisnap_notif_v1',
+  API_KEY: 'nutrisnap_api_key',
+  API_PROVIDER: 'nutrisnap_api_provider',
 };
 
 export const DEFAULT_GOALS = { calories: 2000, protein: 150, carbs: 200, fat: 65 };

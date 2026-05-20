@@ -1,20 +1,31 @@
-const MODEL = 'claude-sonnet-4-20250514';
 const PROXY = '/api/claude';
 
-// Password is stored in localStorage after the user unlocks the app.
-// It's sent with every request to the proxy, which validates it server-side.
 function getPassword() {
   return localStorage.getItem('nutrisnap_auth') || '';
 }
 
+function getApiMeta() {
+  return {
+    _userApiKey: localStorage.getItem('nutrisnap_api_key') || '',
+    _provider: localStorage.getItem('nutrisnap_api_provider') || 'anthropic',
+  };
+}
+
+// Models per provider — cheapest tier that supports vision
+const MODELS = {
+  anthropic: 'claude-haiku-4-5-20251001',
+  openai: 'gpt-4o-mini',
+  gemini: 'gemini-1.5-flash',
+};
+
 async function callClaude(body) {
+  const { _provider, _userApiKey } = getApiMeta();
   const response = await fetch(PROXY, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...body, _password: getPassword() }),
+    body: JSON.stringify({ ...body, _password: getPassword(), _provider, _userApiKey }),
   });
   if (response.status === 401) {
-    // Clear invalid password so the lock screen re-appears
     localStorage.removeItem('nutrisnap_auth');
     window.dispatchEvent(new Event('nutrisnap_unauthorized'));
     throw new Error('Unauthorized');
@@ -23,9 +34,14 @@ async function callClaude(body) {
   return response.json();
 }
 
+function getModel() {
+  const provider = localStorage.getItem('nutrisnap_api_provider') || 'anthropic';
+  return MODELS[provider] || MODELS.anthropic;
+}
+
 export async function analyzeFood(base64, mimeType) {
   const data = await callClaude({
-    model: MODEL,
+    model: getModel(),
     max_tokens: 600,
     messages: [{
       role: 'user',
@@ -52,7 +68,7 @@ export async function getNudge(todayTotals, goals) {
   const prompt = `User nutrition gaps today: ${JSON.stringify(gaps)}. Meal context: ${mealCtx}. Write a single short, friendly, specific nudge (1-2 sentences, max 30 words) suggesting a specific food to eat RIGHT NOW to close the most important gap. Be direct and concrete like: "You need 25g more protein — grab a boiled egg and some chicken breast now!" Return ONLY the nudge text.`;
 
   const data = await callClaude({
-    model: MODEL,
+    model: getModel(),
     max_tokens: 80,
     messages: [{ role: 'user', content: prompt }]
   });
