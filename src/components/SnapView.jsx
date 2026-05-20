@@ -23,14 +23,18 @@ export default function SnapView({ onSaved }) {
   };
 
   const analyze = async () => {
+    if (!localStorage.getItem('nutrisnap_api_key')) {
+      setErr('No API key set. Go to Goals & Settings → AI Provider to add one.');
+      return;
+    }
     setState('analyzing'); setErr(null);
     try {
       const res = await analyzeFood(imgB64, imgMime);
       setMacros({ calories: res.calories || 0, protein: res.protein || 0, carbs: res.carbs || 0, fat: res.fat || 0, fiber: res.fiber || 0 });
       setMealName(res.name || 'Meal');
       setState('review');
-    } catch {
-      setErr('Could not analyze image. Please try again.');
+    } catch (e) {
+      setErr(e.message || 'Could not analyze image. Please try again.');
       setState('preview');
     }
   };
