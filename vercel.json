@@ -1,0 +1,5 @@
+{
+  "buildCommand": "REACT_APP_BUILD_TIME=$(date -u '+%Y-%m-%d %H:%M UTC') REACT_APP_VERSION=$(node -p \"require('./package.json').version\") npm run build",
+  "outputDirectory": "build",
+  "framework": "create-react-app"
+}
