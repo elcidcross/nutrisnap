@@ -110,7 +110,7 @@ export default function App() {
         {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={id => setLogs(p => p.filter(l => l.id !== id))} onEdit={(id, updates) => setLogs(p => p.map(l => l.id === id ? { ...l, ...updates } : l))} />}
         {tab === 'snap' && <SnapView logs={logs} onSaved={entry => { setLogs(p => [entry, ...p]); setTab('log'); }} />}
         {tab === 'report' && <ReportView logs={logs} goalsHistory={goalsHistory} />}
-        {tab === 'settings' && <SettingsView goals={goals} setGoals={setGoals} notif={notif} setNotif={setNotif} goalsHistory={goalsHistory} setGoalsHistory={setGoalsHistory} />}
+        {tab === 'settings' && <SettingsView goals={goals} setGoals={setGoals} notif={notif} setNotif={setNotif} goalsHistory={goalsHistory} setGoalsHistory={setGoalsHistory} logs={logs} onImport={entries => setLogs(p => { const ids = new Set(p.map(l => l.id)); return [...p, ...entries.filter(e => !ids.has(e.id))]; })} />}
       </div>
 
       {/* Bottom nav */}

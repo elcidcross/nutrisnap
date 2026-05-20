@@ -33,7 +33,19 @@ function Toggle({ on, onToggle, label }) {
   );
 }
 
-export default function SettingsView({ goals, setGoals, notif, setNotif, goalsHistory, setGoalsHistory }) {
+function parseCSVLine(line) {
+  const result = [];
+  let cur = '', inQuote = false;
+  for (const ch of line) {
+    if (ch === '"') inQuote = !inQuote;
+    else if (ch === ',' && !inQuote) { result.push(cur.trim()); cur = ''; }
+    else cur += ch;
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+export default function SettingsView({ goals, setGoals, notif, setNotif, goalsHistory, setGoalsHistory, logs, onImport }) {
   const saveGoal = (field, val) => {
     const g = { ...goals, [field]: val };
     setGoals(g);
@@ -44,6 +56,59 @@ export default function SettingsView({ goals, setGoals, notif, setNotif, goalsHi
     save(KEYS.GOALS_HISTORY, newHistory);
   };
   const updateNotif = patch => { const n = { ...notif, ...patch }; setNotif(n); save(KEYS.NOTIF, n); };
+
+  const [importMsg, setImportMsg] = React.useState(null);
+
+  const exportCSV = () => {
+    const rows = [['date', 'time', 'name', 'calories', 'protein', 'carbs', 'fat', 'fiber']];
+    [...logs].sort((a, b) => a.timestamp - b.timestamp).forEach(l => {
+      const d = new Date(l.timestamp);
+      rows.push([
+        d.toISOString().slice(0, 10),
+        d.toTimeString().slice(0, 5),
+        `"${(l.name || '').replace(/"/g, '""')}"`,
+        l.calories || 0, l.protein || 0, l.carbs || 0, l.fat || 0, l.fiber || 0,
+      ]);
+    });
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `nutrisnap-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  const importCSV = e => {
+    const file = e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const lines = ev.target.result.split('\n').filter(Boolean);
+      if (lines.length < 2) { setImportMsg('No data found in file.'); return; }
+      const header = lines[0].toLowerCase().split(',').map(h => h.trim());
+      const idx = name => header.indexOf(name);
+      const entries = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = parseCSVLine(lines[i]);
+        const dateStr = cols[idx('date')]; const timeStr = cols[idx('time')] || '12:00';
+        if (!dateStr) continue;
+        const timestamp = new Date(`${dateStr}T${timeStr}`).getTime();
+        if (isNaN(timestamp)) continue;
+        entries.push({
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2) + i,
+          timestamp,
+          name: cols[idx('name')] || 'Meal',
+          calories: parseFloat(cols[idx('calories')]) || 0,
+          protein: parseFloat(cols[idx('protein')]) || 0,
+          carbs: parseFloat(cols[idx('carbs')]) || 0,
+          fat: parseFloat(cols[idx('fat')]) || 0,
+          fiber: parseFloat(cols[idx('fiber')]) || 0,
+        });
+      }
+      onImport(entries);
+      setImportMsg(`Imported ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}.`);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
 
   const [provider, setProvider] = React.useState(() => localStorage.getItem(KEYS.API_PROVIDER) || 'anthropic');
   const [apiKey, setApiKey] = React.useState(() => localStorage.getItem(KEYS.API_KEY) || '');
@@ -190,6 +255,24 @@ export default function SettingsView({ goals, setGoals, notif, setNotif, goalsHi
             Get a {providerInfo.label} key →
           </a>
         </div>
+      </div>
+
+      <div style={{ height: '0.5px', background: 'rgba(0,0,0,.08)', margin: '20px 0 0' }} />
+
+      {/* Data */}
+      <div style={{ padding: '20px 16px 0' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 14 }}>Data</div>
+        <button onClick={exportCSV} disabled={logs.length === 0}
+          style={{ width: '100%', padding: '12px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: 'none', background: '#f0f0ea', cursor: logs.length ? 'pointer' : 'not-allowed', opacity: logs.length ? 1 : 0.45, display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', marginBottom: 10 }}>
+          <i className="ti ti-download" />Export meals to CSV
+        </button>
+        <label style={{ width: '100%', display: 'block', marginBottom: 10 }}>
+          <input type="file" accept=".csv,text/csv" style={{ display: 'none' }} onChange={importCSV} />
+          <div style={{ width: '100%', padding: '12px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: '1.5px solid rgba(0,0,0,.12)', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', boxSizing: 'border-box' }}>
+            <i className="ti ti-upload" />Import meals from CSV
+          </div>
+        </label>
+        {importMsg && <p style={{ fontSize: 12, color: '#1d9e75', textAlign: 'center', marginTop: 4 }}>{importMsg}</p>}
       </div>
     </div>
   );
