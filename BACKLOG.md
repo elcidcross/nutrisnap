@@ -6,3 +6,5 @@
 - [ ] Snap tab: select a previously logged meal from history to re-log
 - [ ] Fix iPhone UI: header text overlaps system status bar
 - [ ] Gallery picker: open photos directly without submenu
+- [ ] Migrate hosting from Netlify to Vercel
+- [ ] Add semver version number and improve build stamp display (better contrast, larger text)
