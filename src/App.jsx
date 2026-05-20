@@ -120,8 +120,8 @@ export default function App() {
         borderTop: '0.5px solid rgba(0,0,0,.1)', display: 'flex', flexDirection: 'column',
         zIndex: 20, paddingBottom: 'env(safe-area-inset-bottom)',
       }} aria-label="Main navigation">
-        <div style={{ textAlign: 'center', fontSize: 9, color: '#ccc', padding: '3px 0 0' }}>
-          Built {process.env.REACT_APP_BUILD_TIME || 'dev'}
+        <div style={{ textAlign: 'center', fontSize: 10, color: '#aaa', padding: '3px 0 0', fontWeight: 500 }}>
+          v{process.env.REACT_APP_VERSION || '0.0.0'} · {process.env.REACT_APP_BUILD_TIME || 'dev'}
         </div>
         <div style={{ display: 'flex' }}>
         {TABS.map(t => (
