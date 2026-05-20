@@ -56,10 +56,16 @@ export default function SnapView({ onSaved }) {
       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#e1f5ee', color: '#0f6e56', fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 7, marginBottom: 20 }}>
         <i className="ti ti-sparkles" style={{ fontSize: 13 }} />Powered by Claude AI
       </div>
-      <label style={{ width: '100%', cursor: 'pointer' }}>
+      <label style={{ width: '100%', cursor: 'pointer', marginBottom: 10 }}>
         <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={handleFile} />
         <div style={{ width: '100%', padding: 14, borderRadius: 12, fontSize: 15, fontWeight: 700, border: 'none', background: '#1d9e75', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-          <i className="ti ti-camera" />Take or upload photo
+          <i className="ti ti-camera" />Take photo
+        </div>
+      </label>
+      <label style={{ width: '100%', cursor: 'pointer' }}>
+        <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
+        <div style={{ width: '100%', padding: 14, borderRadius: 12, fontSize: 15, fontWeight: 700, border: '2px solid #1d9e75', background: 'transparent', color: '#1d9e75', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <i className="ti ti-photo" />Choose from gallery
         </div>
       </label>
     </div>
