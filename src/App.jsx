@@ -82,6 +82,7 @@ export default function App() {
       {/* Header */}
       <div style={{
         padding: '16px 20px 12px', borderBottom: '0.5px solid rgba(0,0,0,.1)',
+        paddingTop: 'calc(env(safe-area-inset-top) + 16px)',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         background: '#fff', position: 'sticky', top: 0, zIndex: 10,
       }}>
