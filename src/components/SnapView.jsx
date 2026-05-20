@@ -6,6 +6,7 @@ const COLORS = { cal: '#1d9e75', protein: '#d4537e', carbs: '#378add', fat: '#ba
 export default function SnapView({ onSaved }) {
   const [state, setState] = useState('idle');
   const [imgUrl, setImgUrl] = useState(null);
+  const [imgThumb, setImgThumb] = useState(null);
   const [imgB64, setImgB64] = useState(null);
   const [imgMime, setImgMime] = useState('image/jpeg');
   const [macros, setMacros] = useState(null);
@@ -13,13 +14,32 @@ export default function SnapView({ onSaved }) {
   const [err, setErr] = useState(null);
   const [textInput, setTextInput] = useState('');
 
+  const makeThumbnail = (objectUrl) => new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 300;
+      const ratio = Math.min(MAX / img.width, MAX / img.height, 1);
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width * ratio;
+      canvas.height = img.height * ratio;
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.src = objectUrl;
+  });
+
   const handleFile = e => {
     const f = e.target.files[0]; if (!f) return;
     setErr(null);
     setImgMime(f.type || 'image/jpeg');
-    setImgUrl(URL.createObjectURL(f));
+    const objectUrl = URL.createObjectURL(f);
+    setImgUrl(objectUrl);
     const reader = new FileReader();
-    reader.onload = ev => { setImgB64(ev.target.result.split(',')[1]); setState('preview'); };
+    reader.onload = async ev => {
+      setImgB64(ev.target.result.split(',')[1]);
+      setImgThumb(await makeThumbnail(objectUrl));
+      setState('preview');
+    };
     reader.readAsDataURL(f);
   };
 
@@ -41,7 +61,7 @@ export default function SnapView({ onSaved }) {
   };
 
   const confirm = () => {
-    onSaved({ id: Date.now().toString(36) + Math.random().toString(36).slice(2), timestamp: Date.now(), name: mealName, imageUrl: imgUrl, ...macros });
+    onSaved({ id: Date.now().toString(36) + Math.random().toString(36).slice(2), timestamp: Date.now(), name: mealName, imageUrl: imgThumb || imgUrl, ...macros });
     reset();
   };
 
@@ -63,7 +83,7 @@ export default function SnapView({ onSaved }) {
     }
   };
 
-  const reset = () => { setState('idle'); setImgUrl(null); setImgB64(null); setMacros(null); setMealName(''); setErr(null); setTextInput(''); };
+  const reset = () => { setState('idle'); setImgUrl(null); setImgThumb(null); setImgB64(null); setMacros(null); setMealName(''); setErr(null); setTextInput(''); };
 
   const s = { padding: '20px' };
 
