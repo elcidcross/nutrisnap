@@ -1,5 +1,10 @@
 import React from 'react';
-import { save, KEYS } from '../utils/storage';
+import { supabase } from '../utils/supabase';
+
+const KEYS = {
+  API_KEY: 'nutrisnap_api_key',
+  API_PROVIDER: 'nutrisnap_api_provider',
+};
 
 const PROVIDERS = [
   { value: 'anthropic', label: 'Anthropic (Claude)', placeholder: 'sk-ant-…', link: 'https://console.anthropic.com/settings/keys' },
@@ -45,18 +50,7 @@ function parseCSVLine(line) {
   return result;
 }
 
-export default function SettingsView({ goals, setGoals, notif, setNotif, goalsHistory, setGoalsHistory, logs, onImport }) {
-  const saveGoal = (field, val) => {
-    const g = { ...goals, [field]: val };
-    setGoals(g);
-    save(KEYS.GOALS, g);
-    const snap = { timestamp: Date.now(), ...g };
-    const newHistory = [...goalsHistory, snap];
-    setGoalsHistory(newHistory);
-    save(KEYS.GOALS_HISTORY, newHistory);
-  };
-  const updateNotif = patch => { const n = { ...notif, ...patch }; setNotif(n); save(KEYS.NOTIF, n); };
-
+export default function SettingsView({ goals, notif, goalsHistory, logs, onGoalSave, onNotifChange, onImport }) {
   const [importMsg, setImportMsg] = React.useState(null);
 
   const exportCSV = () => {
@@ -127,7 +121,7 @@ export default function SettingsView({ goals, setGoals, notif, setNotif, goalsHi
   const requestAndEnable = async () => {
     if (!('Notification' in window)) { alert('This browser does not support notifications.'); return; }
     const perm = await Notification.requestPermission();
-    if (perm === 'granted') updateNotif({ enabled: true });
+    if (perm === 'granted') onNotifChange({ enabled: true });
     else alert('Notification permission denied. Please enable it in your device settings.');
   };
 
@@ -139,10 +133,10 @@ export default function SettingsView({ goals, setGoals, notif, setNotif, goalsHi
       {/* Goals */}
       <div style={{ padding: '20px 16px 0' }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 14 }}>Daily nutrition goals</div>
-        <GoalRow color={COLORS.cal} label="Calories" field="calories" goals={goals} unit="kcal" onSave={saveGoal} />
-        <GoalRow color={COLORS.protein} label="Protein" field="protein" goals={goals} unit="g" onSave={saveGoal} />
-        <GoalRow color={COLORS.carbs} label="Carbs" field="carbs" goals={goals} unit="g" onSave={saveGoal} />
-        <GoalRow color={COLORS.fat} label="Fat" field="fat" goals={goals} unit="g" onSave={saveGoal} />
+        <GoalRow color={COLORS.cal} label="Calories" field="calories" goals={goals} unit="kcal" onSave={onGoalSave} />
+        <GoalRow color={COLORS.protein} label="Protein" field="protein" goals={goals} unit="g" onSave={onGoalSave} />
+        <GoalRow color={COLORS.carbs} label="Carbs" field="carbs" goals={goals} unit="g" onSave={onGoalSave} />
+        <GoalRow color={COLORS.fat} label="Fat" field="fat" goals={goals} unit="g" onSave={onGoalSave} />
       </div>
 
       <div style={{ height: '0.5px', background: 'rgba(0,0,0,.08)', margin: '20px 0 0' }} />
@@ -156,7 +150,7 @@ export default function SettingsView({ goals, setGoals, notif, setNotif, goalsHi
             <div style={{ fontSize: 14, fontWeight: 600 }}>Daily reminders</div>
             <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>Push alerts to log your meals</div>
           </div>
-          <Toggle on={notif.enabled} onToggle={() => notif.enabled ? updateNotif({ enabled: false }) : requestAndEnable()} label="Toggle reminders" />
+          <Toggle on={notif.enabled} onToggle={() => notif.enabled ? onNotifChange({ enabled: false }) : requestAndEnable()} label="Toggle reminders" />
         </div>
 
         {notif.enabled && (
@@ -164,7 +158,7 @@ export default function SettingsView({ goals, setGoals, notif, setNotif, goalsHi
             {notif.times.map((t, i) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                 <i className="ti ti-clock" style={{ fontSize: 16, color: '#aaa' }} aria-hidden="true" />
-                <select value={t} onChange={e => { const times = [...notif.times]; times[i] = e.target.value; updateNotif({ times }); }}
+                <select value={t} onChange={e => { const times = [...notif.times]; times[i] = e.target.value; onNotifChange({ times }); }}
                   style={{ fontSize: 13, border: '0.5px solid rgba(0,0,0,.2)', borderRadius: 7, padding: '5px 8px', background: 'transparent', color: 'inherit', flex: 1 }}
                   aria-label={`Reminder ${i + 1} time`}>
                   {timeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -180,11 +174,10 @@ export default function SettingsView({ goals, setGoals, notif, setNotif, goalsHi
             <div style={{ fontSize: 14, fontWeight: 600 }}>AI nutrition nudges</div>
             <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>Smart food suggestions to hit your goals</div>
           </div>
-          <Toggle on={notif.nudgeEnabled} onToggle={() => updateNotif({ nudgeEnabled: !notif.nudgeEnabled })} label="Toggle AI nudges" />
+          <Toggle on={notif.nudgeEnabled} onToggle={() => onNotifChange({ nudgeEnabled: !notif.nudgeEnabled })} label="Toggle AI nudges" />
         </div>
       </div>
 
-      {/* Info box */}
       <div style={{ margin: '20px 16px 0', background: '#f5f5f0', borderRadius: 12, padding: 14, fontSize: 13, color: '#777', lineHeight: 1.65 }}>
         <i className="ti ti-info-circle" style={{ fontSize: 15, marginRight: 6, verticalAlign: -2 }} aria-hidden="true" />
         Nudges are generated by AI based on your gap to daily goals. The more you log, the smarter the advice gets.
@@ -273,6 +266,17 @@ export default function SettingsView({ goals, setGoals, notif, setNotif, goalsHi
           </div>
         </label>
         {importMsg && <p style={{ fontSize: 12, color: '#1d9e75', textAlign: 'center', marginTop: 4 }}>{importMsg}</p>}
+      </div>
+
+      <div style={{ height: '0.5px', background: 'rgba(0,0,0,.08)', margin: '20px 0 0' }} />
+
+      {/* Account */}
+      <div style={{ padding: '20px 16px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 14 }}>Account</div>
+        <button onClick={() => supabase.auth.signOut()}
+          style={{ width: '100%', padding: '12px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700, border: '1.5px solid rgba(0,0,0,.12)', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', color: '#e24b4a' }}>
+          <i className="ti ti-logout" />Sign out
+        </button>
       </div>
     </div>
   );

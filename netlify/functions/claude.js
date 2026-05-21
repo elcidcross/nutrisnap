@@ -10,17 +10,23 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: 'Invalid JSON' };
   }
 
-  // ── Password check ──────────────────────────────────────────────────────────
-  const appPassword = process.env.APP_PASSWORD;
-  if (!appPassword) {
-    return { statusCode: 500, body: 'Server misconfigured: APP_PASSWORD not set' };
+  // Validate Supabase JWT
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return { statusCode: 500, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Server misconfigured: Supabase env vars not set' }) };
   }
-  if (!body._password || body._password !== appPassword) {
+
+  const token = body._supabaseToken;
+  if (!token) {
     return { statusCode: 401, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
-  if (body._authOnly) {
-    return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ok: true }) };
+  const authRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: { 'Authorization': `Bearer ${token}`, 'apikey': supabaseAnonKey },
+  }).catch(() => null);
+  if (!authRes || !authRes.ok) {
+    return { statusCode: 401, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'Unauthorized' }) };
   }
 
   const provider = body._provider || 'anthropic';
@@ -30,7 +36,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ error: 'No API key configured. Add one in Settings.' }) };
   }
 
-  const { _password, _userApiKey, _provider, _jsonResponse, ...aiBody } = body;
+  const { _supabaseToken, _userApiKey, _provider, _jsonResponse, ...aiBody } = body;
 
   try {
     let result;
@@ -68,7 +74,6 @@ async function callAnthropic(apiKey, body) {
   return data;
 }
 
-// Convert Anthropic content blocks → OpenAI content array
 function toOpenAIContent(content) {
   if (typeof content === 'string') return content;
   return content.map(block => {
@@ -90,11 +95,9 @@ async function callOpenAI(apiKey, body) {
   });
   const data = await res.json();
   if (!res.ok) throw Object.assign(new Error(data.error?.message || 'OpenAI error'), { status: res.status });
-  // Normalize to Anthropic response shape
   return { content: [{ type: 'text', text: data.choices[0].message.content }] };
 }
 
-// Convert Anthropic content blocks → Gemini parts array
 function toGeminiParts(content) {
   if (typeof content === 'string') return [{ text: content }];
   return content.map(block => {

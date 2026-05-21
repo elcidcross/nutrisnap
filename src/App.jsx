@@ -4,31 +4,51 @@ import LogView from './components/LogView';
 import SnapView from './components/SnapView';
 import ReportView from './components/ReportView';
 import SettingsView from './components/SettingsView';
-import { load, save, KEYS, DEFAULT_GOALS, DEFAULT_NOTIF } from './utils/storage';
+import { supabase } from './utils/supabase';
+import { getLogs, addLog, updateLog, deleteLog, bulkAddLogs, getGoals, saveGoals, getGoalsHistory, addGoalsHistoryEntry, getNotifSettings, saveNotifSettings, DEFAULT_GOALS, DEFAULT_NOTIF } from './utils/db';
 import { todayStr } from './utils/date';
 
 export default function App() {
-  const [unlocked, setUnlocked] = useState(() => !!localStorage.getItem('nutrisnap_auth'));
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false);
   const [tab, setTab] = useState('log');
-  const [logs, setLogs] = useState(() => load(KEYS.LOGS, []));
-  const [goals, setGoals] = useState(() => load(KEYS.GOALS, DEFAULT_GOALS));
-  const [goalsHistory, setGoalsHistory] = useState(() => {
-    const h = load(KEYS.GOALS_HISTORY, null);
-    if (h) return h;
-    const g = load(KEYS.GOALS, DEFAULT_GOALS);
-    return [{ timestamp: 0, ...g }];
-  });
-  const [notif, setNotif] = useState(() => load(KEYS.NOTIF, DEFAULT_NOTIF));
+  const [logs, setLogs] = useState([]);
+  const [goals, setGoals] = useState(DEFAULT_GOALS);
+  const [goalsHistory, setGoalsHistory] = useState([]);
+  const [notif, setNotif] = useState(DEFAULT_NOTIF);
 
-  // Lock again if the proxy ever rejects the stored password
+  // Auth state
   useEffect(() => {
-    const handler = () => setUnlocked(false);
-    window.addEventListener('nutrisnap_unauthorized', handler);
-    return () => window.removeEventListener('nutrisnap_unauthorized', handler);
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user ?? null);
+      setAuthLoading(false);
+    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
-  useEffect(() => save(KEYS.LOGS, logs), [logs]);
-  useEffect(() => save(KEYS.GOALS_HISTORY, goalsHistory), [goalsHistory]);
+  // Load data when user logs in
+  useEffect(() => {
+    if (!user) {
+      setLogs([]); setGoals(DEFAULT_GOALS); setGoalsHistory([]); setNotif(DEFAULT_NOTIF);
+      return;
+    }
+    setDataLoading(true);
+    Promise.all([
+      getLogs(user.id),
+      getGoals(user.id),
+      getGoalsHistory(user.id),
+      getNotifSettings(user.id),
+    ]).then(([l, g, gh, n]) => {
+      setLogs(l);
+      setGoals(g);
+      setGoalsHistory(gh.length ? gh : [{ timestamp: 0, ...g }]);
+      setNotif(n);
+    }).catch(console.error).finally(() => setDataLoading(false));
+  }, [user]);
 
   const todayTotals = useMemo(() => {
     return logs
@@ -46,7 +66,7 @@ export default function App() {
     goals.calories - todayTotals.calories > 200
   );
 
-  // Scheduled push notifications (fires once per minute check)
+  // Scheduled push notifications
   useEffect(() => {
     if (!('Notification' in window) || Notification.permission !== 'granted' || !notif.enabled) return;
     const interval = setInterval(() => {
@@ -56,7 +76,7 @@ export default function App() {
         if (t === cur) {
           const rem = Math.max(0, Math.round(goals.calories - todayTotals.calories));
           new Notification('NutriSnap', {
-            body: rem > 0 ? `${rem} kcal left to reach your goal today!` : "You've hit your calorie goal today! 🎉",
+            body: rem > 0 ? `${rem} kcal left to reach your goal today!` : "You've hit your calorie goal today!",
             icon: '/icon-192.png',
             tag: 'nutrisnap-reminder',
           });
@@ -66,7 +86,59 @@ export default function App() {
     return () => clearInterval(interval);
   }, [notif, goals, todayTotals]);
 
-  if (!unlocked) return <LockScreen onUnlock={() => setUnlocked(true)} />;
+  const handleAddLog = (entry) => {
+    setLogs(p => [entry, ...p]);
+    addLog(user.id, entry).catch(console.error);
+  };
+
+  const handleDeleteLog = (id) => {
+    setLogs(p => p.filter(l => l.id !== id));
+    deleteLog(user.id, id).catch(console.error);
+  };
+
+  const handleEditLog = (id, updates) => {
+    setLogs(p => p.map(l => l.id === id ? { ...l, ...updates } : l));
+    updateLog(user.id, id, updates).catch(console.error);
+  };
+
+  const handleGoalSave = (field, val) => {
+    const newGoals = { ...goals, [field]: val };
+    setGoals(newGoals);
+    saveGoals(user.id, newGoals).catch(console.error);
+    const snap = { timestamp: Date.now(), ...newGoals };
+    setGoalsHistory(p => [...p, snap]);
+    addGoalsHistoryEntry(user.id, snap).catch(console.error);
+  };
+
+  const handleNotifChange = (patch) => {
+    const newNotif = { ...notif, ...patch };
+    setNotif(newNotif);
+    saveNotifSettings(user.id, newNotif).catch(console.error);
+  };
+
+  const handleImport = (entries) => {
+    const existingIds = new Set(logs.map(l => l.id));
+    const toAdd = entries.filter(e => !existingIds.has(e.id));
+    setLogs(p => [...p, ...toAdd].sort((a, b) => b.timestamp - a.timestamp));
+    bulkAddLogs(user.id, toAdd).catch(console.error);
+  };
+
+  if (authLoading) return (
+    <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 36, height: 36, border: '3px solid #e0f5ed', borderTopColor: '#1d9e75', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+
+  if (!user) return <LockScreen />;
+
+  if (dataLoading) return (
+    <div style={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+      <div style={{ width: 36, height: 36, border: '3px solid #e0f5ed', borderTopColor: '#1d9e75', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
+      <p style={{ fontSize: 14, color: '#888' }}>Loading your data…</p>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
 
   const TABS = [
     { id: 'log', icon: 'ti-list', label: 'Log' },
@@ -107,10 +179,20 @@ export default function App() {
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 80 }}>
-        {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={id => setLogs(p => p.filter(l => l.id !== id))} onEdit={(id, updates) => setLogs(p => p.map(l => l.id === id ? { ...l, ...updates } : l))} />}
-        {tab === 'snap' && <SnapView logs={logs} onSaved={entry => { setLogs(p => [entry, ...p]); setTab('log'); }} />}
+        {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={handleDeleteLog} onEdit={handleEditLog} />}
+        {tab === 'snap' && <SnapView logs={logs} onSaved={entry => { handleAddLog(entry); setTab('log'); }} />}
         {tab === 'report' && <ReportView logs={logs} goalsHistory={goalsHistory} />}
-        {tab === 'settings' && <SettingsView goals={goals} setGoals={setGoals} notif={notif} setNotif={setNotif} goalsHistory={goalsHistory} setGoalsHistory={setGoalsHistory} logs={logs} onImport={entries => setLogs(p => { const ids = new Set(p.map(l => l.id)); return [...p, ...entries.filter(e => !ids.has(e.id))]; })} />}
+        {tab === 'settings' && (
+          <SettingsView
+            goals={goals}
+            notif={notif}
+            goalsHistory={goalsHistory}
+            logs={logs}
+            onGoalSave={handleGoalSave}
+            onNotifChange={handleNotifChange}
+            onImport={handleImport}
+          />
+        )}
       </div>
 
       {/* Bottom nav */}

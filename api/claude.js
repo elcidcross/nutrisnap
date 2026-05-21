@@ -9,17 +9,24 @@ module.exports = async (req, res) => {
   const body = req.body;
   if (!body || typeof body !== 'object') return res.status(400).json({ error: 'Invalid JSON' });
 
-  const appPassword = process.env.APP_PASSWORD;
-  if (!appPassword) return res.status(500).json({ error: 'Server misconfigured: APP_PASSWORD not set' });
-  if (!body._password || body._password !== appPassword) return res.status(401).json({ error: 'Unauthorized' });
+  // Validate Supabase JWT
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) return res.status(500).json({ error: 'Server misconfigured: Supabase env vars not set' });
 
-  if (body._authOnly) return res.status(200).json({ ok: true });
+  const token = body._supabaseToken;
+  if (!token) return res.status(401).json({ error: 'Unauthorized' });
+
+  const authRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: { 'Authorization': `Bearer ${token}`, 'apikey': supabaseAnonKey },
+  }).catch(() => null);
+  if (!authRes || !authRes.ok) return res.status(401).json({ error: 'Unauthorized' });
 
   const provider = body._provider || 'anthropic';
   const apiKey = body._userApiKey || process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(400).json({ error: 'No API key configured. Add one in Settings.' });
 
-  const { _password, _userApiKey, _provider, _jsonResponse, ...aiBody } = body;
+  const { _supabaseToken, _userApiKey, _provider, _jsonResponse, ...aiBody } = body;
 
   try {
     let result;

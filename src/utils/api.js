@@ -1,8 +1,6 @@
-const PROXY = '/api/claude';
+import { supabase } from './supabase';
 
-function getPassword() {
-  return localStorage.getItem('nutrisnap_auth') || '';
-}
+const PROXY = '/api/claude';
 
 function getApiMeta() {
   return {
@@ -11,27 +9,31 @@ function getApiMeta() {
   };
 }
 
-// Models per provider — cheapest tier that supports vision
 const MODELS = {
   anthropic: 'claude-haiku-4-5-20251001',
   openai: 'gpt-4o-mini',
   gemini: 'gemini-3.5-flash',
 };
 
+async function getToken() {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token || '';
+}
+
 async function callClaude(body, retries = 2) {
   const { _provider, _userApiKey } = getApiMeta();
+  const _supabaseToken = await getToken();
   for (let attempt = 0; attempt <= retries; attempt++) {
     const response = await fetch(PROXY, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...body, _password: getPassword(), _provider, _userApiKey }),
+      body: JSON.stringify({ ...body, _supabaseToken, _provider, _userApiKey }),
     });
     if (response.status === 401) {
-      localStorage.removeItem('nutrisnap_auth');
+      await supabase.auth.signOut();
       window.dispatchEvent(new Event('nutrisnap_unauthorized'));
       throw new Error('Unauthorized');
     }
-    // Retry on rate-limit / overload errors
     if ((response.status === 429 || response.status === 529 || response.status === 503) && attempt < retries) {
       await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
       continue;
@@ -61,7 +63,6 @@ export async function analyzeFood(base64, mimeType) {
     }]
   });
   const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
-  // Normalise single-quoted keys/values to double quotes, then try multiple parse strategies
   const normalized = raw.replace(/'([^']*)'/g, '"$1"');
   for (const candidate of [raw, normalized, raw.match(/\{[\s\S]*\}/)?.[0], normalized.match(/\{[\s\S]*\}/)?.[0]]) {
     if (!candidate) continue;
