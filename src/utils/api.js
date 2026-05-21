@@ -49,11 +49,31 @@ function getModel() {
   return MODELS[provider] || MODELS.anthropic;
 }
 
+// Extract the first complete JSON object from a string using balanced brackets.
+// More robust than a greedy regex, which matches to the LAST } and breaks on
+// trailing text or multiple JSON blobs.
+function extractJson(str) {
+  const start = str.indexOf('{');
+  if (start === -1) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < str.length; i++) {
+    const c = str[i];
+    if (esc) { esc = false; continue; }
+    if (c === '\\' && inStr) { esc = true; continue; }
+    if (c === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return str.slice(start, i + 1);
+  }
+  return null;
+}
+
 function parseJson(raw) {
   const normalized = raw.replace(/'([^']*)'/g, '"$1"');
-  for (const candidate of [raw, normalized, raw.match(/\{[\s\S]*\}/)?.[0], normalized.match(/\{[\s\S]*\}/)?.[0]]) {
-    if (!candidate) continue;
-    try { return JSON.parse(candidate); } catch {}
+  for (const str of [raw, normalized]) {
+    try { return JSON.parse(str); } catch {}
+    const extracted = extractJson(str);
+    if (extracted) try { return JSON.parse(extracted); } catch {}
   }
   console.error('AI raw response (full):', raw);
   throw new Error(`AI returned unexpected response: ${raw.slice(0, 120)}`);
