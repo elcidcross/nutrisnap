@@ -4,7 +4,10 @@
       "Bash(git commit -m ' *)",
       "Bash(curl -s http://localhost:8888)",
       "Bash(echo \"PID: $!\")",
-      "Bash(vercel --prod)"
+      "Bash(vercel --prod)",
+      "Bash(npm version *)",
+      "Bash(git push *)",
+      "Bash(git commit *)"
     ]
   }
 }
