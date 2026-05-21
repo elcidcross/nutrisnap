@@ -162,7 +162,15 @@ export async function getFoodLibrary(userId) {
 }
 
 export async function saveFoodToLibrary(userId, entry) {
-  const { error } = await supabase.from('food_library').upsert({
+  // Find existing row by case-insensitive name; insert or update accordingly.
+  // Supabase upsert can't use functional unique indexes, so we do this manually.
+  const { data: existing } = await supabase
+    .from('food_library')
+    .select('id')
+    .eq('user_id', userId)
+    .ilike('name', entry.name)
+    .maybeSingle();
+  const row = {
     user_id: userId,
     name: entry.name,
     ref_amount: entry.refAmount,
@@ -172,7 +180,10 @@ export async function saveFoodToLibrary(userId, entry) {
     carbs: entry.carbs,
     fat: entry.fat,
     fiber: entry.fiber || 0,
-  }, { onConflict: 'food_library_user_name' });
+  };
+  const { error } = existing
+    ? await supabase.from('food_library').update(row).eq('id', existing.id)
+    : await supabase.from('food_library').insert(row);
   if (error) throw error;
 }
 

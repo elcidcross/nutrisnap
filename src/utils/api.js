@@ -50,12 +50,13 @@ function getModel() {
 }
 
 // Extract the first complete JSON object from a string using balanced brackets.
-// More robust than a greedy regex, which matches to the LAST } and breaks on
-// trailing text or multiple JSON blobs.
-function extractJson(str) {
+// If the JSON is truncated (depth > 0 at end), attempts repair by closing
+// open structures at the last valid comma/colon boundary.
+function extractJson(str, allowRepair = false) {
   const start = str.indexOf('{');
   if (start === -1) return null;
   let depth = 0, inStr = false, esc = false;
+  let lastCompleteEntry = -1; // position after last `,` at depth 1 (where we could truncate)
   for (let i = start; i < str.length; i++) {
     const c = str[i];
     if (esc) { esc = false; continue; }
@@ -63,39 +64,66 @@ function extractJson(str) {
     if (c === '"') { inStr = !inStr; continue; }
     if (inStr) continue;
     if (c === '{') depth++;
-    else if (c === '}' && --depth === 0) return str.slice(start, i + 1);
+    else if (c === '}') { if (--depth === 0) return str.slice(start, i + 1); }
+    else if (c === ',' && depth === 1) lastCompleteEntry = i;
+  }
+  if (!allowRepair || depth === 0) return null;
+  // Repair truncated JSON: trim at last complete entry and close remaining depth
+  if (lastCompleteEntry > 0) {
+    return str.slice(start, lastCompleteEntry) + '}'.repeat(depth);
   }
   return null;
 }
 
 function parseJson(raw) {
-  const normalized = raw.replace(/'([^']*)'/g, '"$1"');
-  for (const str of [raw, normalized]) {
+  // Strip control chars (except \n, \r, \t) that can break JSON.parse
+  // eslint-disable-next-line no-control-regex
+  const cleaned = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  const normalized = cleaned.replace(/'([^']*)'/g, '"$1"');
+  for (const str of [cleaned, normalized]) {
     try { return JSON.parse(str); } catch {}
     const extracted = extractJson(str);
     if (extracted) try { return JSON.parse(extracted); } catch {}
   }
+  // Last resort: try to repair truncated JSON
+  for (const str of [cleaned, normalized]) {
+    const repaired = extractJson(str, true);
+    if (repaired) try {
+      console.warn('Repaired truncated JSON:', repaired);
+      return JSON.parse(repaired);
+    } catch {}
+  }
   console.error('AI raw response (full):', raw);
-  throw new Error(`AI returned unexpected response: ${raw.slice(0, 120)}`);
+  throw new Error(`AI returned unexpected response: ${raw.slice(0, 200)}`);
 }
 
 const PHASE1_SUFFIX = 'You must respond with ONLY a raw JSON object — no explanation, no markdown, no extra text whatsoever. Use grams for loose/bulk foods (ref_amount: 100, ref_unit: "g") or a countable unit for discrete items (ref_amount: 1, ref_unit: "egg"/"slice"/"cup"/etc). Example: {"name":"blueberries","amount":30,"unit":"g","ref_amount":100,"ref_unit":"g"}';
+
+// Build messages with assistant prefill of `{` so Anthropic models start with raw JSON.
+// The prefill is prepended to the response by the proxy before returning.
+function jsonMessages(userContent) {
+  return [
+    { role: 'user', content: userContent },
+    { role: 'assistant', content: '{' },
+  ];
+}
+
+function cleanRaw(text) {
+  return text.replace(/```json|```/g, '').trim();
+}
 
 // Phase 1: identify food + estimate amount + choose reference unit
 export async function identifyFood(base64, mimeType) {
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 512,
+    max_tokens: 1024,
     _jsonResponse: true,
-    messages: [{
-      role: 'user',
-      content: [
-        { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-        { type: 'text', text: `Identify the main food in this image and estimate the quantity shown. ${PHASE1_SUFFIX}` }
-      ]
-    }]
+    messages: jsonMessages([
+      { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+      { type: 'text', text: `Identify the main food in this image and estimate the quantity shown. ${PHASE1_SUFFIX}` }
+    ]),
   });
-  const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+  const raw = cleanRaw(data.content.map(b => b.text || '').join(''));
   return { ...parseJson(raw), _modelUsed: data._modelUsed };
 }
 
@@ -103,14 +131,11 @@ export async function identifyFood(base64, mimeType) {
 export async function identifyFoodText(description) {
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 512,
+    max_tokens: 1024,
     _jsonResponse: true,
-    messages: [{
-      role: 'user',
-      content: `Identify the food and quantity from this description: "${description}". ${PHASE1_SUFFIX}`,
-    }]
+    messages: jsonMessages(`Identify the food and quantity from this description: "${description}". ${PHASE1_SUFFIX}`),
   });
-  const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+  const raw = cleanRaw(data.content.map(b => b.text || '').join(''));
   return { ...parseJson(raw), _modelUsed: data._modelUsed };
 }
 
@@ -118,14 +143,11 @@ export async function identifyFoodText(description) {
 export async function getPerUnitMacros(foodName, refAmount, refUnit) {
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 512,
+    max_tokens: 1024,
     _jsonResponse: true,
-    messages: [{
-      role: 'user',
-      content: `What are the macronutrients for ${refAmount} ${refUnit} of ${foodName}? You must respond with ONLY a raw JSON object — no explanation, no markdown, no extra text whatsoever. Example: {"calories":57,"protein":0.7,"carbs":14.5,"fat":0.3,"fiber":2.4}`,
-    }]
+    messages: jsonMessages(`What are the macronutrients for ${refAmount} ${refUnit} of ${foodName}? You must respond with ONLY a raw JSON object — no explanation, no markdown, no extra text whatsoever. Example: {"calories":57,"protein":0.7,"carbs":14.5,"fat":0.3,"fiber":2.4}`),
   });
-  const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+  const raw = cleanRaw(data.content.map(b => b.text || '').join(''));
   return { ...parseJson(raw), _modelUsed: data._modelUsed };
 }
 

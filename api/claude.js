@@ -30,18 +30,33 @@ module.exports = async (req, res) => {
 
   try {
     let result;
-    if (provider === 'openai') result = await callOpenAI(apiKey, aiBody);
+    if (provider === 'openai') result = await callOpenAI(apiKey, aiBody, _jsonResponse);
     else if (provider === 'gemini') result = await callGemini(apiKey, aiBody, _jsonResponse);
-    else result = await callAnthropic(apiKey, aiBody);
+    else result = await callAnthropic(apiKey, aiBody, _jsonResponse);
     const _modelUsed = result._modelUsed || aiBody.model;
     const { _modelUsed: _, ...clean } = result;
+    if (_jsonResponse) {
+      const txt = clean.content?.map(b => b.text || '').join('') || '';
+      console.log(`[${provider}] JSON response (len=${txt.length}):`, txt.slice(0, 500));
+    }
     return res.status(200).json({ ...clean, _modelUsed });
   } catch (err) {
     return res.status(err.status || 500).json({ error: err.message });
   }
 };
 
-async function callAnthropic(apiKey, body) {
+// Detect assistant prefill (Anthropic style: last message is { role: 'assistant' })
+// and strip it so OpenAI/Gemini don't choke, then re-prepend its content to the response.
+function extractPrefill(body) {
+  const last = body.messages?.[body.messages.length - 1];
+  if (last?.role === 'assistant' && typeof last.content === 'string') {
+    return { prefill: last.content, body: { ...body, messages: body.messages.slice(0, -1) } };
+  }
+  return { prefill: '', body };
+}
+
+async function callAnthropic(apiKey, body, jsonResponse) {
+  // Anthropic supports assistant prefill natively — pass the body through.
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
@@ -49,6 +64,12 @@ async function callAnthropic(apiKey, body) {
   });
   const data = await r.json();
   if (!r.ok) throw Object.assign(new Error(data.error?.message || 'Anthropic error'), { status: r.status === 401 ? 502 : r.status });
+  // Prepend prefill to response text so caller sees complete JSON object
+  const last = body.messages?.[body.messages.length - 1];
+  const prefill = (last?.role === 'assistant' && typeof last.content === 'string') ? last.content : '';
+  if (prefill && data.content?.[0]?.type === 'text') {
+    data.content[0].text = prefill + (data.content[0].text || '');
+  }
   return data;
 }
 
@@ -61,16 +82,22 @@ function toOpenAIContent(content) {
   });
 }
 
-async function callOpenAI(apiKey, body) {
-  const messages = body.messages.map(m => ({ role: m.role, content: toOpenAIContent(m.content) }));
+async function callOpenAI(apiKey, body, jsonResponse) {
+  const { prefill, body: stripped } = extractPrefill(body);
+  const messages = stripped.messages.map(m => ({ role: m.role, content: toOpenAIContent(m.content) }));
   const r = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: body.model, max_tokens: body.max_tokens, messages }),
+    body: JSON.stringify({
+      model: stripped.model,
+      max_tokens: stripped.max_tokens,
+      messages,
+      ...(jsonResponse && { response_format: { type: 'json_object' } }),
+    }),
   });
   const data = await r.json();
   if (!r.ok) throw Object.assign(new Error(data.error?.message || 'OpenAI error'), { status: r.status });
-  return { content: [{ type: 'text', text: data.choices[0].message.content }] };
+  return { content: [{ type: 'text', text: prefill + data.choices[0].message.content }] };
 }
 
 function toGeminiParts(content) {
@@ -83,7 +110,8 @@ function toGeminiParts(content) {
 }
 
 async function callGeminiModel(apiKey, model, body, jsonResponse) {
-  const parts = body.messages.flatMap(m => toGeminiParts(m.content));
+  const { prefill, body: stripped } = extractPrefill(body);
+  const parts = stripped.messages.flatMap(m => toGeminiParts(m.content));
   const r = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
@@ -91,14 +119,17 @@ async function callGeminiModel(apiKey, model, body, jsonResponse) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts }],
-        generationConfig: { maxOutputTokens: body.max_tokens, ...(jsonResponse && { responseMimeType: 'application/json' }) },
+        generationConfig: { maxOutputTokens: stripped.max_tokens, ...(jsonResponse && { responseMimeType: 'application/json' }) },
       }),
     }
   );
   const data = await r.json();
   if (!r.ok) throw Object.assign(new Error(data.error?.message || 'Gemini error'), { status: r.status });
   const responseParts = data.candidates?.[0]?.content?.parts || [];
-  return { content: [{ type: 'text', text: responseParts.map(p => p.text || '').join('') }] };
+  const text = responseParts.map(p => p.text || '').join('');
+  // Gemini in JSON mode already returns clean JSON, don't double-prepend prefill if it's already there
+  const finalText = (jsonResponse && text.trimStart().startsWith('{')) ? text : prefill + text;
+  return { content: [{ type: 'text', text: finalText }] };
 }
 
 async function callGemini(apiKey, body, jsonResponse) {
