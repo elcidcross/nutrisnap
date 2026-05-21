@@ -55,20 +55,23 @@ function parseJson(raw) {
     if (!candidate) continue;
     try { return JSON.parse(candidate); } catch {}
   }
+  console.error('AI raw response (full):', raw);
   throw new Error(`AI returned unexpected response: ${raw.slice(0, 120)}`);
 }
+
+const PHASE1_SUFFIX = 'You must respond with ONLY a raw JSON object — no explanation, no markdown, no extra text whatsoever. Use grams for loose/bulk foods (ref_amount: 100, ref_unit: "g") or a countable unit for discrete items (ref_amount: 1, ref_unit: "egg"/"slice"/"cup"/etc). Example: {"name":"blueberries","amount":30,"unit":"g","ref_amount":100,"ref_unit":"g"}';
 
 // Phase 1: identify food + estimate amount + choose reference unit
 export async function identifyFood(base64, mimeType) {
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 256,
+    max_tokens: 512,
     _jsonResponse: true,
     messages: [{
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-        { type: 'text', text: 'Identify the main food in this image and estimate how much is shown. Choose a natural reference unit: use grams (ref_amount: 100, ref_unit: "g") for loose/bulk foods measured by weight, or a countable unit like "egg", "slice", "cup", "piece" (ref_amount: 1) for discrete items. Respond ONLY with raw JSON: {"name":"food name max 3 words","amount":number,"unit":"unit string","ref_amount":number,"ref_unit":"unit string"}' }
+        { type: 'text', text: `Identify the main food in this image and estimate the quantity shown. ${PHASE1_SUFFIX}` }
       ]
     }]
   });
@@ -80,11 +83,11 @@ export async function identifyFood(base64, mimeType) {
 export async function identifyFoodText(description) {
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 256,
+    max_tokens: 512,
     _jsonResponse: true,
     messages: [{
       role: 'user',
-      content: `Identify the food and amount from this description. Choose a natural reference unit: use grams (ref_amount: 100, ref_unit: "g") for loose/bulk foods, or a countable unit (ref_amount: 1) for discrete items like eggs, slices, cups. Respond ONLY with raw JSON: {"name":"food name max 3 words","amount":number,"unit":"unit string","ref_amount":number,"ref_unit":"unit string"}. Description: ${description}`,
+      content: `Identify the food and quantity from this description: "${description}". ${PHASE1_SUFFIX}`,
     }]
   });
   const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
@@ -95,11 +98,11 @@ export async function identifyFoodText(description) {
 export async function getPerUnitMacros(foodName, refAmount, refUnit) {
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 256,
+    max_tokens: 512,
     _jsonResponse: true,
     messages: [{
       role: 'user',
-      content: `Give me the macronutrients for ${refAmount} ${refUnit} of ${foodName}. Respond ONLY with raw JSON: {"calories":integer,"protein":decimal,"carbs":decimal,"fat":decimal,"fiber":decimal}`,
+      content: `What are the macronutrients for ${refAmount} ${refUnit} of ${foodName}? You must respond with ONLY a raw JSON object — no explanation, no markdown, no extra text whatsoever. Example: {"calories":57,"protein":0.7,"carbs":14.5,"fat":0.3,"fiber":2.4}`,
     }]
   });
   const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
