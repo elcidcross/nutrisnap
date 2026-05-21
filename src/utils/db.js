@@ -65,6 +65,8 @@ export async function updateLog(userId, id, updates) {
   if (updates.carbs !== undefined) row.carbs = updates.carbs;
   if (updates.fat !== undefined) row.fat = updates.fat;
   if (updates.fiber !== undefined) row.fiber = updates.fiber;
+  if (updates.amount !== undefined) row.amount = updates.amount;
+  if (updates.timestamp !== undefined) row.timestamp = updates.timestamp;
   const { error } = await supabase.from('logs').update(row).eq('id', id).eq('user_id', userId);
   if (error) throw error;
 }

@@ -94,17 +94,61 @@ export default function LogView({ logs, goals, onDelete, onEdit }) {
   );
 }
 
+function toLocalInput(ts) {
+  const d = new Date(ts);
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+function r1(n) { return Math.round(n * 10) / 10; }
+
 function LogEntry({ entry, onDelete, onEdit }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
 
   const startEdit = () => {
-    setDraft({ name: entry.name, calories: entry.calories, protein: entry.protein, carbs: entry.carbs, fat: entry.fat });
+    setDraft({
+      name: entry.name,
+      amount: entry.amount ?? '',
+      timestamp: toLocalInput(entry.timestamp),
+      calories: entry.calories,
+      protein: entry.protein,
+      carbs: entry.carbs,
+      fat: entry.fat,
+    });
     setEditing(true);
   };
 
+  // Changing amount rescales all macros proportionally
+  const changeAmount = (newAmt) => {
+    const prev = +draft.amount;
+    const next = +newAmt;
+    if (prev > 0 && next >= 0 && !Number.isNaN(next)) {
+      const ratio = next / prev;
+      setDraft(d => ({
+        ...d,
+        amount: newAmt,
+        calories: Math.round(+d.calories * ratio),
+        protein: r1(+d.protein * ratio),
+        carbs: r1(+d.carbs * ratio),
+        fat: r1(+d.fat * ratio),
+      }));
+    } else {
+      setDraft(d => ({ ...d, amount: newAmt }));
+    }
+  };
+
   const save = () => {
-    onEdit(entry.id, { name: draft.name, calories: +draft.calories, protein: +draft.protein, carbs: +draft.carbs, fat: +draft.fat });
+    const updates = {
+      name: draft.name,
+      calories: +draft.calories,
+      protein: +draft.protein,
+      carbs: +draft.carbs,
+      fat: +draft.fat,
+      timestamp: new Date(draft.timestamp).getTime(),
+    };
+    if (entry.amount != null && draft.amount !== '') updates.amount = +draft.amount;
+    onEdit(entry.id, updates);
     setEditing(false);
   };
 
@@ -121,6 +165,24 @@ function LogEntry({ entry, onDelete, onEdit }) {
     <div style={{ padding: '14px 16px', borderBottom: '0.5px solid rgba(0,0,0,.07)', background: '#fafaf8' }}>
       <input value={draft.name} onChange={e => setDraft(d => ({ ...d, name: e.target.value }))}
         style={{ width: '100%', fontSize: 15, fontWeight: 700, border: 'none', borderBottom: '2px solid #1d9e75', background: 'transparent', outline: 'none', color: 'inherit', paddingBottom: 4, marginBottom: 14, boxSizing: 'border-box' }} />
+
+      <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+        {entry.amount != null && (
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 10, color: '#888', fontWeight: 700, marginBottom: 3 }}>AMOUNT ({entry.unit || 'g'})</div>
+            <input type="number" value={draft.amount} min={0} step={0.1}
+              onChange={e => changeAmount(e.target.value)}
+              style={{ width: '100%', fontSize: 14, fontWeight: 700, border: 'none', borderBottom: '2px solid #888', background: 'transparent', outline: 'none', color: 'inherit', paddingBottom: 2 }} />
+          </div>
+        )}
+        <div style={{ flex: entry.amount != null ? 1.5 : 1 }}>
+          <div style={{ fontSize: 10, color: '#888', fontWeight: 700, marginBottom: 3 }}>WHEN</div>
+          <input type="datetime-local" value={draft.timestamp}
+            onChange={e => setDraft(d => ({ ...d, timestamp: e.target.value }))}
+            style={{ width: '100%', fontSize: 13, fontWeight: 600, border: 'none', borderBottom: '2px solid #888', background: 'transparent', outline: 'none', color: 'inherit', paddingBottom: 2, fontFamily: 'inherit' }} />
+        </div>
+      </div>
+
       <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
         {field('CALORIES', 'calories', '#1d9e75')}
         {field('PROTEIN', 'protein', '#d4537e')}
