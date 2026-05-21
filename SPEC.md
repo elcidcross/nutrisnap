@@ -18,7 +18,7 @@ Version: 1.1.0
 | Service worker | Workbox 7 (CRA precaching + custom caching) |
 | Serverless proxy | Vercel (`api/claude.js`) |
 | Storage | `localStorage` only — no backend database |
-| Hosting | Vercel (production), Netlify (legacy) |
+| Hosting | Vercel |
 
 All AI calls go through the serverless proxy, which validates the app password, strips internal fields, and routes to the selected AI provider.
 
@@ -212,7 +212,7 @@ Internal fields are stripped before forwarding to the AI provider. The response 
 
 ```
 # Local dev
-netlify dev
+npm start
 
 # Production deploy
 vercel --prod

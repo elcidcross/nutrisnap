@@ -57,12 +57,11 @@ npm run build
 
 Outputs a `build/` folder. Deploy it to any static host:
 
-| Host | Command |
-|------|---------|
-| **Vercel** | `npx vercel --prod` |
-| **Netlify** | Drag `build/` into netlify.com/drop |
-| **GitHub Pages** | `npx gh-pages -d build` |
-| **Firebase** | `firebase deploy` |
+Deploy to Vercel:
+
+```bash
+vercel --prod
+```
 
 Once deployed at an **HTTPS** URL, the PWA is fully installable on all platforms.
 
