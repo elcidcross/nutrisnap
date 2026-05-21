@@ -1,6 +1,25 @@
 # NutriSnap – AI Nutrition Tracker
 
-Snap a photo of any meal → Claude AI estimates calories & macros → track against your daily goals → get smart nudges to stay on track.
+Snap a photo of any meal → AI estimates calories & macros → track against your daily goals → get smart nudges to stay on track.
+
+Live: **https://nutrisnap-lovat.vercel.app**
+
+## Demo
+
+<table>
+  <tr>
+    <td align="center"><b>Sign in</b><br><img src="docs/screenshots/01-lock.png" alt="Sign-in screen" width="240"></td>
+    <td align="center"><b>Today's log</b><br><img src="docs/screenshots/02-log.png" alt="Log view with rings, progress bars, and nudge" width="240"></td>
+    <td align="center"><b>Snap a meal</b><br><img src="docs/screenshots/03-snap-idle.png" alt="Snap tab with text and photo inputs" width="240"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Two-phase AI review</b><br><img src="docs/screenshots/04-snap-review.png" alt="Review screen showing AI-estimated per-unit macros" width="240"></td>
+    <td align="center"><b>Reports — calories</b><br><img src="docs/screenshots/05-report-calories.png" alt="Day chart with calories selected" width="240"></td>
+    <td align="center"><b>Tap a tile to switch</b><br><img src="docs/screenshots/06-report-protein.png" alt="Day chart switched to protein view" width="240"></td>
+  </tr>
+</table>
+
+Type a food name or snap a photo. **Phase 1** identifies the food, amount, and a natural reference unit (grams for loose foods, eggs/slices/cups for discrete items). **Phase 2** fetches per-unit macros — but only the first time. Re-logging the same food hits a per-user library cache and skips the AI call entirely. The review screen lets you tweak the amount and the macros rescale live; saving the per-unit values back updates the library so future logs are even faster.
 
 ---
 
