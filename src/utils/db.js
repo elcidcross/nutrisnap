@@ -15,6 +15,10 @@ function rowToLog(row) {
     fat: row.fat,
     fiber: row.fiber,
     model: row.model || null,
+    amount: row.amount ?? null,
+    unit: row.unit ?? null,
+    refAmount: row.ref_amount ?? null,
+    refUnit: row.ref_unit ?? null,
   };
 }
 
@@ -31,6 +35,10 @@ function logToRow(userId, entry) {
     fat: entry.fat || 0,
     fiber: entry.fiber || 0,
     model: entry.model || null,
+    amount: entry.amount ?? null,
+    unit: entry.unit ?? null,
+    ref_amount: entry.refAmount ?? null,
+    ref_unit: entry.refUnit ?? null,
   };
 }
 
@@ -130,6 +138,52 @@ export async function saveNotifSettings(userId, settings) {
     times: settings.times,
     nudge_enabled: settings.nudgeEnabled,
   }, { onConflict: 'user_id' });
+  if (error) throw error;
+}
+
+// Food library
+export async function getFoodLibrary(userId) {
+  const { data, error } = await supabase
+    .from('food_library')
+    .select('*')
+    .eq('user_id', userId)
+    .order('name');
+  if (error) throw error;
+  return (data || []).map(row => ({
+    name: row.name,
+    refAmount: row.ref_amount,
+    refUnit: row.ref_unit,
+    calories: row.calories,
+    protein: row.protein,
+    carbs: row.carbs,
+    fat: row.fat,
+    fiber: row.fiber,
+  }));
+}
+
+export async function saveFoodToLibrary(userId, entry) {
+  const { error } = await supabase.from('food_library').upsert({
+    user_id: userId,
+    name: entry.name,
+    ref_amount: entry.refAmount,
+    ref_unit: entry.refUnit,
+    calories: entry.calories,
+    protein: entry.protein,
+    carbs: entry.carbs,
+    fat: entry.fat,
+    fiber: entry.fiber || 0,
+  }, { onConflict: 'food_library_user_name' });
+  if (error) throw error;
+}
+
+export async function updateFoodInLibrary(userId, name, macros) {
+  const { error } = await supabase.from('food_library').update({
+    calories: macros.calories,
+    protein: macros.protein,
+    carbs: macros.carbs,
+    fat: macros.fat,
+    fiber: macros.fiber || 0,
+  }).eq('user_id', userId).ilike('name', name);
   if (error) throw error;
 }
 

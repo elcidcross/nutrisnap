@@ -5,7 +5,7 @@ import SnapView from './components/SnapView';
 import ReportView from './components/ReportView';
 import SettingsView from './components/SettingsView';
 import { supabase } from './utils/supabase';
-import { getLogs, addLog, updateLog, deleteLog, bulkAddLogs, getGoals, saveGoals, getGoalsHistory, addGoalsHistoryEntry, getNotifSettings, saveNotifSettings, DEFAULT_GOALS, DEFAULT_NOTIF } from './utils/db';
+import { getLogs, addLog, updateLog, deleteLog, bulkAddLogs, getGoals, saveGoals, getGoalsHistory, addGoalsHistoryEntry, getNotifSettings, saveNotifSettings, getFoodLibrary, saveFoodToLibrary, updateFoodInLibrary, DEFAULT_GOALS, DEFAULT_NOTIF } from './utils/db';
 import { todayStr } from './utils/date';
 
 export default function App() {
@@ -17,6 +17,7 @@ export default function App() {
   const [goals, setGoals] = useState(DEFAULT_GOALS);
   const [goalsHistory, setGoalsHistory] = useState([]);
   const [notif, setNotif] = useState(DEFAULT_NOTIF);
+  const [foodLibrary, setFoodLibrary] = useState([]);
 
   // Auth state
   useEffect(() => {
@@ -33,7 +34,7 @@ export default function App() {
   // Load data when user logs in
   useEffect(() => {
     if (!user) {
-      setLogs([]); setGoals(DEFAULT_GOALS); setGoalsHistory([]); setNotif(DEFAULT_NOTIF);
+      setLogs([]); setGoals(DEFAULT_GOALS); setGoalsHistory([]); setNotif(DEFAULT_NOTIF); setFoodLibrary([]);
       return;
     }
     setDataLoading(true);
@@ -42,11 +43,13 @@ export default function App() {
       getGoals(user.id),
       getGoalsHistory(user.id),
       getNotifSettings(user.id),
-    ]).then(([l, g, gh, n]) => {
+      getFoodLibrary(user.id),
+    ]).then(([l, g, gh, n, fl]) => {
       setLogs(l);
       setGoals(g);
       setGoalsHistory(gh.length ? gh : [{ timestamp: 0, ...g }]);
       setNotif(n);
+      setFoodLibrary(fl);
     }).catch(console.error).finally(() => setDataLoading(false));
   }, [user]);
 
@@ -116,6 +119,19 @@ export default function App() {
     saveNotifSettings(user.id, newNotif).catch(console.error);
   };
 
+  const handleSaveToLibrary = (entry) => {
+    setFoodLibrary(p => {
+      const idx = p.findIndex(f => f.name.toLowerCase() === entry.name.toLowerCase());
+      return idx >= 0 ? p.map((f, i) => i === idx ? { ...f, ...entry } : f) : [...p, entry];
+    });
+    saveFoodToLibrary(user.id, entry).catch(console.error);
+  };
+
+  const handleUpdateLibrary = (name, macros) => {
+    setFoodLibrary(p => p.map(f => f.name.toLowerCase() === name.toLowerCase() ? { ...f, ...macros } : f));
+    updateFoodInLibrary(user.id, name, macros).catch(console.error);
+  };
+
   const handleImport = (entries) => {
     const existingIds = new Set(logs.map(l => l.id));
     const toAdd = entries.filter(e => !existingIds.has(e.id));
@@ -180,7 +196,7 @@ export default function App() {
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 80 }}>
         {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={handleDeleteLog} onEdit={handleEditLog} />}
-        {tab === 'snap' && <SnapView logs={logs} onSaved={entry => { handleAddLog(entry); setTab('log'); }} />}
+        {tab === 'snap' && <SnapView logs={logs} foodLibrary={foodLibrary} onSaved={entry => { handleAddLog(entry); setTab('log'); }} onSaveToLibrary={handleSaveToLibrary} onUpdateLibrary={handleUpdateLibrary} />}
         {tab === 'report' && <ReportView logs={logs} goalsHistory={goalsHistory} />}
         {tab === 'settings' && (
           <SettingsView

@@ -49,45 +49,61 @@ function getModel() {
   return MODELS[provider] || MODELS.anthropic;
 }
 
-export async function analyzeFood(base64, mimeType) {
+function parseJson(raw) {
+  const normalized = raw.replace(/'([^']*)'/g, '"$1"');
+  for (const candidate of [raw, normalized, raw.match(/\{[\s\S]*\}/)?.[0], normalized.match(/\{[\s\S]*\}/)?.[0]]) {
+    if (!candidate) continue;
+    try { return JSON.parse(candidate); } catch {}
+  }
+  throw new Error(`AI returned unexpected response: ${raw.slice(0, 120)}`);
+}
+
+// Phase 1: identify food + estimate amount + choose reference unit
+export async function identifyFood(base64, mimeType) {
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 2048,
+    max_tokens: 256,
     _jsonResponse: true,
     messages: [{
       role: 'user',
       content: [
         { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-        { type: 'text', text: 'Analyze this food image. You must respond with ONLY a raw JSON object — no explanation, no markdown, no extra text whatsoever. Format: {"name":"short name max 5 words","calories":integer,"protein":decimal,"carbs":decimal,"fat":decimal,"fiber":decimal}. Estimate for a typical single serving.' }
+        { type: 'text', text: 'Identify the main food in this image and estimate how much is shown. Choose a natural reference unit: use grams (ref_amount: 100, ref_unit: "g") for loose/bulk foods measured by weight, or a countable unit like "egg", "slice", "cup", "piece" (ref_amount: 1) for discrete items. Respond ONLY with raw JSON: {"name":"food name max 3 words","amount":number,"unit":"unit string","ref_amount":number,"ref_unit":"unit string"}' }
       ]
     }]
   });
   const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
-  const normalized = raw.replace(/'([^']*)'/g, '"$1"');
-  for (const candidate of [raw, normalized, raw.match(/\{[\s\S]*\}/)?.[0], normalized.match(/\{[\s\S]*\}/)?.[0]]) {
-    if (!candidate) continue;
-    try { return { ...JSON.parse(candidate), _modelUsed: data._modelUsed }; } catch {}
-  }
-  throw new Error(`AI returned unexpected response: ${raw.slice(0, 120)}`);
+  return { ...parseJson(raw), _modelUsed: data._modelUsed };
 }
 
-export async function analyzeFoodText(description) {
+// Phase 1 (text): identify food + estimate amount + choose reference unit
+export async function identifyFoodText(description) {
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 2048,
+    max_tokens: 256,
     _jsonResponse: true,
     messages: [{
       role: 'user',
-      content: `Analyze this meal description and estimate its nutrition. You must respond with ONLY a raw JSON object — no explanation, no markdown, no extra text whatsoever. Format: {"name":"short name max 5 words","calories":integer,"protein":decimal,"carbs":decimal,"fat":decimal,"fiber":decimal}. Meal: ${description}`
+      content: `Identify the food and amount from this description. Choose a natural reference unit: use grams (ref_amount: 100, ref_unit: "g") for loose/bulk foods, or a countable unit (ref_amount: 1) for discrete items like eggs, slices, cups. Respond ONLY with raw JSON: {"name":"food name max 3 words","amount":number,"unit":"unit string","ref_amount":number,"ref_unit":"unit string"}. Description: ${description}`,
     }]
   });
   const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
-  const normalized = raw.replace(/'([^']*)'/g, '"$1"');
-  for (const candidate of [raw, normalized, raw.match(/\{[\s\S]*\}/)?.[0], normalized.match(/\{[\s\S]*\}/)?.[0]]) {
-    if (!candidate) continue;
-    try { return { ...JSON.parse(candidate), _modelUsed: data._modelUsed }; } catch {}
-  }
-  throw new Error(`AI returned unexpected response: ${raw.slice(0, 120)}`);
+  return { ...parseJson(raw), _modelUsed: data._modelUsed };
+}
+
+// Phase 2: get macros per reference unit (only called for new foods not in library)
+export async function getPerUnitMacros(foodName, refAmount, refUnit) {
+  const data = await callClaude({
+    model: getModel(),
+    max_tokens: 256,
+    _jsonResponse: true,
+    messages: [{
+      role: 'user',
+      content: `Give me the macronutrients for ${refAmount} ${refUnit} of ${foodName}. Respond ONLY with raw JSON: {"calories":integer,"protein":decimal,"carbs":decimal,"fat":decimal,"fiber":decimal}`,
+    }]
+  });
+  const raw = data.content.map(b => b.text || '').join('').replace(/```json|```/g, '').trim();
+  return { ...parseJson(raw), _modelUsed: data._modelUsed };
 }
 
 export async function getNudge(todayTotals, goals) {

@@ -143,7 +143,9 @@ function LogEntry({ entry, onDelete, onEdit }) {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.name}</div>
-        <div style={{ fontSize: 11, color: '#999', marginBottom: 6 }}>{fmtTime(entry.timestamp)}{entry.model && <> · <span style={{ fontFamily: 'monospace' }}>{entry.model}</span></>}</div>
+        <div style={{ fontSize: 11, color: '#999', marginBottom: 6 }}>
+          {entry.amount && entry.unit ? <>{entry.amount} {entry.unit} · </> : null}{fmtTime(entry.timestamp)}{entry.model && <> · <span style={{ fontFamily: 'monospace' }}>{entry.model}</span></>}
+        </div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {[['#d4537e','P',entry.protein,'g'],['#378add','C',entry.carbs,'g'],['#ba7517','F',entry.fat,'g']].map(([c,l,v,u]) => (
             <span key={l} style={{ fontSize: 11, color: '#888', display: 'flex', alignItems: 'center', gap: 3 }}>
