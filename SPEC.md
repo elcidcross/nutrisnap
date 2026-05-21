@@ -2,10 +2,10 @@
 
 ## Overview
 
-NutriSnap is a mobile-first progressive web app (PWA) for tracking daily nutrition. Users photograph meals or type descriptions to get instant AI-estimated macros. The app stores logs locally, tracks progress against user-defined goals, and offers AI-generated nudges throughout the day.
+NutriSnap is a mobile-first progressive web app (PWA) for tracking daily nutrition. Users photograph meals or type descriptions to get instant AI-estimated macros. All logs, goals, and the per-user food library are stored in Supabase so data syncs across devices. The app tracks progress against user-defined goals and offers AI-generated nudges throughout the day.
 
-Live: https://nutrisnap-lovat.vercel.app  
-Version: 1.1.0
+Live: https://nutrisnap-lovat.vercel.app
+Version: 1.1.1
 
 ---
 
@@ -16,94 +16,132 @@ Version: 1.1.0
 | Frontend | React 18, Create React App |
 | Charting | Chart.js 4 |
 | Service worker | Workbox 7 (CRA precaching + custom caching) |
+| Auth + database | Supabase (email/password auth, Postgres with RLS) |
 | Serverless proxy | Vercel (`api/claude.js`) |
-| Storage | `localStorage` only — no backend database |
 | Hosting | Vercel |
 
-All AI calls go through the serverless proxy, which validates the app password, strips internal fields, and routes to the selected AI provider.
+All AI calls go through the serverless proxy. The proxy validates the user's Supabase JWT, strips internal fields, and routes to the selected AI provider.
 
 ---
 
 ## Authentication
 
-- Single shared app password stored in `localStorage` as `nutrisnap_auth`
-- On load, the LockScreen is shown if `nutrisnap_auth` is absent
-- The password is verified server-side via an `_authOnly` request to `/api/claude` — no AI call is made, just the password check
-- If the server ever returns 401, the stored password is cleared and the LockScreen is shown again
-- The app password is set via the `APP_PASSWORD` environment variable on Vercel
+- Email/password auth via Supabase (`@supabase/supabase-js`)
+- `App.jsx` subscribes to `supabase.auth.onAuthStateChange` and renders the `LockScreen` when no session exists
+- Sign-up succeeds without email confirmation (confirmation is disabled in the Supabase project). If `data.session` is present after `signUp`, the user is logged in instantly; otherwise the LockScreen shows a "check your email" message as a fallback
+- Every request to `/api/claude` includes `_supabaseToken`. The proxy verifies it by calling `${SUPABASE_URL}/auth/v1/user` and returns 401 if invalid
+- A 401 from the proxy triggers `supabase.auth.signOut()` and dispatches a `nutrisnap_unauthorized` event so the UI returns to the LockScreen
 
 ---
 
 ## AI Providers
 
-The user selects a provider and enters their own API key in Settings. The key is stored in `localStorage` and sent to the proxy on every request.
+The user selects a provider in Settings and enters their own API key. The key is stored in `localStorage` (per-device) and sent to the proxy on every request. If the user has no key set, the proxy falls back to `ANTHROPIC_API_KEY` on the server.
 
 | Provider | Model | Notes |
 |---|---|---|
 | Google Gemini | `gemini-3.5-flash` | Default. Falls back to `gemini-2.5-flash` on 503 |
-| Anthropic | `claude-haiku-4-5-20251001` | Vision supported |
-| OpenAI | `gpt-4o-mini` | Vision supported |
+| Anthropic | `claude-haiku-4-5-20251001` | Vision supported. Uses `{` assistant prefill for JSON responses |
+| OpenAI | `gpt-4o-mini` | Vision supported. Uses `response_format: { type: 'json_object' }` when JSON is requested |
 
-**Fallback behaviour:** When Gemini 3.5 Flash returns 503 (overloaded), the proxy silently retries the same request with Gemini 2.5 Flash. The model actually used is recorded in the log entry and shown in the UI.
+**Fallback behaviour:** When Gemini 3.5 Flash returns 503 (overloaded), the proxy silently retries with Gemini 2.5 Flash. The model actually used is returned as `_modelUsed` and shown on the review screen and log entries.
 
 **Retry behaviour:** The client retries any 429, 503, or 529 response up to twice, with 1 s and 2 s delays.
 
 ---
 
+## Two-Phase Food Analysis
+
+To minimise AI calls and produce editable, predictable estimates, food analysis happens in two phases:
+
+**Phase 1 — identify** (always runs)
+- Image or text → `{ name, amount, unit, ref_amount, ref_unit }`
+- The model picks a natural reference unit: grams (`ref_amount: 100, ref_unit: "g"`) for loose/bulk foods, or a countable unit (`ref_amount: 1, ref_unit: "egg"/"slice"/"cup"`) for discrete items
+- `max_tokens: 1024`, `_jsonResponse: true`
+
+**Phase 2 — per-unit macros** (only on cache miss)
+- `{ calories, protein, carbs, fat, fiber }` per `ref_amount` of `ref_unit`
+- Skipped entirely if a row exists in the user's `food_library` table with the same case-insensitive name; the cached macros are reused
+
+**Total macros displayed** = `(amount / ref_amount) × ref_macros`. Editing the amount on the review screen recalculates totals live without re-calling the AI.
+
+If the user edits the per-unit macros on the review screen, the library row for that food is updated on save (`onUpdateLibrary`). Editing the amount or display name does not update the library.
+
+---
+
 ## Data Model
 
-All data is stored in `localStorage`. Keys are versioned to avoid stale-data conflicts.
+All data lives in Supabase Postgres. Each table has RLS enabled with a `auth.uid() = user_id` policy. Local state in React mirrors the DB for instant updates; mutations are optimistic with background writes (`.catch(console.error)`).
 
-### Log entry (`nutrisnap_logs_v3`)
+### `logs`
 
-```json
-{
-  "id": "string (base36 timestamp + random)",
-  "timestamp": 1700000000000,
-  "name": "string",
-  "imageUrl": "string (data URL of thumbnail, optional)",
-  "calories": 350,
-  "protein": 28.5,
-  "carbs": 42.0,
-  "fat": 8.0,
-  "fiber": 4.0,
-  "model": "gemini-3.5-flash"
-}
+```
+id              text primary key
+user_id         uuid (auth.users)
+timestamp       int8           -- epoch ms
+name            text
+image_url       text           -- thumbnail data URL, optional
+calories        numeric
+protein         numeric
+carbs           numeric
+fat             numeric
+fiber           numeric default 0
+model           text           -- _modelUsed at time of logging
+amount          numeric        -- nullable, for entries created post-two-phase
+unit            text           -- nullable
+ref_amount      numeric        -- nullable
+ref_unit        text           -- nullable
 ```
 
-### Goals (`nutrisnap_goals_v1`)
+### `goals`
 
-```json
-{ "calories": 2000, "protein": 150, "carbs": 200, "fat": 65 }
+```
+user_id         uuid primary key
+calories        numeric
+protein         numeric
+carbs           numeric
+fat             numeric
 ```
 
-### Goals history (`nutrisnap_goals_history_v1`)
+### `goals_history`
 
-Array of timestamped goal snapshots. A new snapshot is appended whenever the user saves a goal change. Used by the Reports chart to draw the goal line against what the goal actually was on each past day.
-
-```json
-[
-  { "timestamp": 0, "calories": 2000, "protein": 150, "carbs": 200, "fat": 65 },
-  { "timestamp": 1700000000000, "calories": 2200, "protein": 160, "carbs": 220, "fat": 70 }
-]
+```
+id              uuid primary key
+user_id         uuid
+timestamp       int8           -- 0 for the initial snapshot
+calories, protein, carbs, fat
 ```
 
-### Notification settings (`nutrisnap_notif_v1`)
+Used by Reports to draw the goal line against whatever the goal was on each historical day.
 
-```json
-{
-  "enabled": false,
-  "times": ["08:00", "13:00", "18:00"],
-  "nudgeEnabled": true
-}
+### `notif_settings`
+
+```
+user_id         uuid primary key
+enabled         bool
+times           text[]         -- ["08:00","13:00","18:00"]
+nudge_enabled   bool
 ```
 
-### Other keys
+### `food_library`
+
+```
+id              uuid primary key
+user_id         uuid
+name            text
+ref_amount      numeric
+ref_unit        text
+calories, protein, carbs, fat, fiber  numeric
+created_at      timestamptz default now()
+```
+
+Indexed for case-insensitive uniqueness via `create unique index on food_library(user_id, lower(name))`. Because the index is functional, `supabase.upsert(..., { onConflict: ... })` cannot reference it; `saveFoodToLibrary` does a select-then-insert/update against `ilike` instead.
+
+### Local-only keys (`localStorage`)
 
 | Key | Value |
 |---|---|
-| `nutrisnap_auth` | App password (plaintext) |
-| `nutrisnap_api_key` | User's AI provider API key |
+| `nutrisnap_api_key` | User's AI provider API key (per-device) |
 | `nutrisnap_api_provider` | `"anthropic"` \| `"openai"` \| `"gemini"` |
 
 ---
@@ -116,8 +154,8 @@ Array of timestamped goal snapshots. A new snapshot is appended whenever the use
 - Progress bars for the same four nutrients
 - AI nudge card: generated on first visit if any meals are logged today; can be refreshed manually; dismissed per session
 - Meal log grouped by day, newest first
-- Each entry shows: thumbnail (or food icon), name, time, macros, AI model used, calorie count
-- Inline edit: tap pencil to edit name, calories, protein, carbs, fat inline
+- Each entry shows: thumbnail (or food icon), name, amount + unit (when present), time, macros, AI model used, calorie count
+- Inline edit: tap pencil to edit name, amount, timestamp, and macros. Changing the amount proportionally rescales calories and macros so the user doesn't have to do the math.
 - Delete entry with trash icon
 - Badge on the Goals tab nav item when protein or calorie gap is significant
 
@@ -126,37 +164,40 @@ Array of timestamped goal snapshots. A new snapshot is appended whenever the use
 **Photo input**
 - Take photo (camera, with `capture="environment"`)
 - Choose from gallery (no `capture` attribute)
-- Image resized to 300 px max on a canvas before upload; stored as a JPEG data URL thumbnail so it survives page reloads
+- Image resized to 300 px max on a canvas before upload; stored as a JPEG data URL thumbnail so it survives reloads
 - Preview screen before analysis
-- Spinner during analysis
+- Spinner with two states: "Identifying food and amount…" (Phase 1) and "Looking up nutrition data…" (Phase 2)
 
 **Text input**
 - Freetext field on the idle screen; submit with Enter or arrow button
-- Goes directly to the review screen (no preview state)
+- Goes directly to the analysis spinner (no preview state)
 
 **Review screen**
 - Editable meal name
-- Editable macro inputs: calories (full width), protein, carbs, fat, fiber (2-column grid)
+- Editable amount with unit label — changing it recalculates total macros live
+- Per-unit macros card labelled "Per {refAmount} {refUnit}" with 5 editable fields (calories, protein, carbs, fat, fiber); edits here update the user's `food_library` entry on save
+- Read-only totals card: "Total for {amount} {unit}" with calories, protein, carbs, fat, fiber
 - AI model used shown next to the "AI estimate" badge
 - Save to log / Discard
 
 **Recent meals**
 - Deduped by name, up to 5 most recent unique meals
-- Shows thumbnail, name, calories, protein, and AI model used
+- Shows thumbnail, name, amount + unit, calories, protein, AI model used
 - Tap to instantly re-log with a new timestamp (same macros, new ID)
 
 ### Reports tab
 
 - Period selector: Day / Week / Month
-- Summary tiles: total kcal, protein, carbs, fat for the period
-- Bar chart: calorie intake per hour (day) or per day (week/month)
-- Goal line on chart reflects the goal that was active on each specific day (from goals history)
+- Four macro tiles (calories, protein, carbs, fat) — **clickable**; selecting one sets the chart metric and highlights the active tile with a tinted border
+- Bar chart of the selected metric per hour (day) or per day (week/month), with a dashed goal line
+- Goal line reflects the goal that was active on each specific day (from `goals_history`)
+- Tooltip and y-axis units adapt to the selected metric (`kcal` vs `g`)
 
 ### Goals & Settings tab
 
 **Daily nutrition goals**
 - Calories, protein, carbs, fat — each editable inline with blur-to-save
-- Each save appends a timestamped snapshot to goals history
+- Each save appends a timestamped snapshot to `goals_history`
 
 **Reminders**
 - Toggle daily push notifications (requests browser permission on enable)
@@ -178,6 +219,8 @@ Array of timestamped goal snapshots. A new snapshot is appended whenever the use
 - Export all meals to CSV (date, time, name, calories, protein, carbs, fat, fiber)
 - Import meals from CSV (same column names; deduplicates by ID; quoted fields with commas supported)
 
+**Sign out** — clears the Supabase session.
+
 ---
 
 ## PWA Behaviour
@@ -194,17 +237,18 @@ Array of timestamped goal snapshots. A new snapshot is appended whenever the use
 
 ## Proxy API (`/api/claude`)
 
-Single `POST` endpoint. All requests include:
+Single `POST` endpoint. The request body extends the upstream provider's body with internal fields:
 
 | Field | Description |
 |---|---|
-| `_password` | App password for server-side auth |
-| `_userApiKey` | User's AI provider key |
+| `_supabaseToken` | Supabase access token; validated against `${SUPABASE_URL}/auth/v1/user` |
+| `_userApiKey` | User's AI provider key. Falls back to `ANTHROPIC_API_KEY` env var if empty |
 | `_provider` | `"anthropic"` \| `"openai"` \| `"gemini"` |
-| `_authOnly` | If true, validates password only and returns `{ ok: true }` |
-| `_jsonResponse` | If true, asks Gemini to respond as `application/json` |
+| `_jsonResponse` | If true, enables JSON mode for the selected provider (Gemini `responseMimeType`, OpenAI `response_format`, Anthropic relies on prefill) |
 
-Internal fields are stripped before forwarding to the AI provider. The response always includes `_modelUsed` indicating which model actually handled the request.
+For Anthropic requests, the last message can have `{ role: 'assistant', content: '{' }` as a prefill. The proxy keeps it as-is for Anthropic (which supports prefill natively) and strips/re-prepends it for OpenAI and Gemini. The response text is always returned with the prefill included so the caller sees a complete JSON object.
+
+Internal fields are stripped before forwarding. The response always includes `_modelUsed` indicating which model actually handled the request. The proxy logs JSON response text and length to aid debugging.
 
 ---
 
@@ -214,16 +258,32 @@ Internal fields are stripped before forwarding to the AI provider. The response 
 # Local dev
 npm start
 
-# Production deploy
+# Production deploy (after `npm version <bump>`)
 vercel --prod
 ```
 
-Build command: `npm run vercel-build`  
-Injects `REACT_APP_BUILD_TIME` and `REACT_APP_VERSION` (from `package.json`) at build time. Both are displayed in the bottom nav bar.
+Build command: `npm run vercel-build`. Injects `REACT_APP_BUILD_TIME` and `REACT_APP_VERSION` (from `package.json`) at build time. Both are displayed in the bottom nav bar.
 
 Required environment variables on Vercel:
 
 | Variable | Description |
 |---|---|
-| `APP_PASSWORD` | Shared app password |
-| `ANTHROPIC_API_KEY` | Optional server-side fallback key (Anthropic only) |
+| `SUPABASE_URL` | Server-side Supabase project URL (proxy JWT validation) |
+| `SUPABASE_ANON_KEY` | Server-side Supabase anon key |
+| `REACT_APP_SUPABASE_URL` | Client-side Supabase URL (baked into the bundle at build) |
+| `REACT_APP_SUPABASE_ANON_KEY` | Client-side Supabase anon key |
+| `ANTHROPIC_API_KEY` | Optional server-side fallback key for users who haven't set their own |
+
+**Release flow:** bump the version with `npm version patch|minor|major` (creates a tagged commit) → `vercel --prod` → push with `--follow-tags`. The tag doubles as a deploy marker so any historic deploy can be checked out by tag.
+
+---
+
+## E2E Tests
+
+Playwright tests under `e2e/` drive the live deployment end-to-end:
+
+- `e2e/snap_text.test.js` — Phase 1 + Phase 2 analysis from text, save to log, library cache hit on re-analyse
+- `e2e/edit_log.test.js` — Edit amount/timestamp on a logged entry; verify macros rescale and persistence
+- `e2e/report_metrics.test.js` — Click each metric tile; verify chart switches metric
+
+Run with `GEMINI_API_KEY=<key> npm run e2e`. Targets `BASE_URL` (defaults to `https://nutrisnap-lovat.vercel.app`).
