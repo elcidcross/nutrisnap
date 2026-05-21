@@ -21,13 +21,15 @@ export default function LockScreen() {
         const { error: err } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (err) setError(err.message);
       } else {
-        const { error: err } = await supabase.auth.signUp({ email: email.trim(), password });
+        const { data, error: err } = await supabase.auth.signUp({ email: email.trim(), password });
         if (err) {
           setError(err.message);
-        } else {
+        } else if (!data.session) {
+          // Email confirmation required
           setInfo('Check your email for a confirmation link, then log in.');
           setMode('login');
         }
+        // If data.session exists, onAuthStateChange in App.jsx handles the redirect
       }
     } catch {
       setError('Could not reach the server. Are you online?');
