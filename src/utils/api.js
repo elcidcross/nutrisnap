@@ -75,22 +75,33 @@ function extractJson(str, allowRepair = false) {
   return null;
 }
 
-function parseJson(raw) {
+// Callers expect a single object. If the model returned `[{...}]` (ignoring the
+// `{` prefill and wrapping in an array), unwrap to the first element.
+function unwrap(parsed) {
+  if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === 'object') {
+    return parsed[0];
+  }
+  return parsed;
+}
+
+export function parseJson(raw) {
   // Strip control chars (except \n, \r, \t) that can break JSON.parse
   // eslint-disable-next-line no-control-regex
-  const cleaned = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  let cleaned = raw.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  // Repair `{[...` — model ignored the `{` prefill and emitted an array instead
+  if (/^\s*\{\s*\[/.test(cleaned)) cleaned = cleaned.replace(/^\s*\{/, '');
   const normalized = cleaned.replace(/'([^']*)'/g, '"$1"');
   for (const str of [cleaned, normalized]) {
-    try { return JSON.parse(str); } catch {}
+    try { return unwrap(JSON.parse(str)); } catch {}
     const extracted = extractJson(str);
-    if (extracted) try { return JSON.parse(extracted); } catch {}
+    if (extracted) try { return unwrap(JSON.parse(extracted)); } catch {}
   }
   // Last resort: try to repair truncated JSON
   for (const str of [cleaned, normalized]) {
     const repaired = extractJson(str, true);
     if (repaired) try {
       console.warn('Repaired truncated JSON:', repaired);
-      return JSON.parse(repaired);
+      return unwrap(JSON.parse(repaired));
     } catch {}
   }
   console.error('AI raw response (full):', raw);
