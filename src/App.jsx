@@ -194,7 +194,7 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 80 }}>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(110px + env(safe-area-inset-bottom))' }}>
         {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={handleDeleteLog} onEdit={handleEditLog} />}
         {tab === 'snap' && <SnapView logs={logs} foodLibrary={foodLibrary} onSaved={entry => { handleAddLog(entry); setTab('log'); }} onSaveToLibrary={handleSaveToLibrary} onUpdateLibrary={handleUpdateLibrary} />}
         {tab === 'report' && <ReportView logs={logs} goalsHistory={goalsHistory} />}
