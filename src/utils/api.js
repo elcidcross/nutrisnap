@@ -108,7 +108,24 @@ export function parseJson(raw) {
   throw new Error(`AI returned unexpected response: ${raw.slice(0, 200)}`);
 }
 
-const PHASE1_SUFFIX = 'You must respond with ONLY a raw JSON object — no explanation, no markdown, no extra text whatsoever. Use grams for loose/bulk foods (ref_amount: 100, ref_unit: "g") or a countable unit for discrete items (ref_amount: 1, ref_unit: "egg"/"slice"/"cup"/etc). Example: {"name":"blueberries","amount":30,"unit":"g","ref_amount":100,"ref_unit":"g"}';
+const SCHEMA_BLOCK = `Respond with ONLY a raw JSON object — no markdown, no explanation, no extra text:
+{
+  "name": "<concise meal description, e.g. 'chicken rice bowl with broccoli'>",
+  "components": [
+    {"name":"<food item>","amount":<grams>,"unit":"g"}
+  ],
+  "amount": <total weight in grams>,
+  "unit": "g",
+  "calories": <total kcal>,
+  "protein": <total g>,
+  "carbs": <total g>,
+  "fat": <total g>,
+  "fiber": <total g>
+}`;
+
+const RULES = `Identify EVERY visible component — rice, protein, vegetables, sauces, oils, dressings, cooking fats, garnishes. Do NOT collapse the meal to just its dominant item. Estimate each component's portion in grams, then sum macronutrients across all components.
+
+Be generous with sauces, oils, butter, dressings, and cooking fats — they often dominate calories and are easy to underestimate visually.`;
 
 // Build messages with assistant prefill of `{` so Anthropic models start with raw JSON.
 // The prefill is prepended to the response by the proxy before returning.
@@ -123,40 +140,27 @@ function cleanRaw(text) {
   return text.replace(/```json|```/g, '').trim();
 }
 
-// Phase 1: identify food + estimate amount + choose reference unit
-export async function identifyFood(base64, mimeType) {
+// Single-call analysis: identify all components, estimate portions, and return total macros.
+export async function analyzeFood(base64, mimeType) {
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 1024,
+    max_tokens: 4096,
     _jsonResponse: true,
     messages: jsonMessages([
       { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-      { type: 'text', text: `Identify the main food in this image and estimate the quantity shown. ${PHASE1_SUFFIX}` }
+      { type: 'text', text: `Analyze this entire meal and estimate its macronutrients.\n\n${RULES}\n\n${SCHEMA_BLOCK}` }
     ]),
   });
   const raw = cleanRaw(data.content.map(b => b.text || '').join(''));
   return { ...parseJson(raw), _modelUsed: data._modelUsed };
 }
 
-// Phase 1 (text): identify food + estimate amount + choose reference unit
-export async function identifyFoodText(description) {
+export async function analyzeFoodText(description) {
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 1024,
+    max_tokens: 4096,
     _jsonResponse: true,
-    messages: jsonMessages(`Identify the food and quantity from this description: "${description}". ${PHASE1_SUFFIX}`),
-  });
-  const raw = cleanRaw(data.content.map(b => b.text || '').join(''));
-  return { ...parseJson(raw), _modelUsed: data._modelUsed };
-}
-
-// Phase 2: get macros per reference unit (only called for new foods not in library)
-export async function getPerUnitMacros(foodName, refAmount, refUnit) {
-  const data = await callClaude({
-    model: getModel(),
-    max_tokens: 1024,
-    _jsonResponse: true,
-    messages: jsonMessages(`What are the macronutrients for ${refAmount} ${refUnit} of ${foodName}? You must respond with ONLY a raw JSON object — no explanation, no markdown, no extra text whatsoever. Example: {"calories":57,"protein":0.7,"carbs":14.5,"fat":0.3,"fiber":2.4}`),
+    messages: jsonMessages(`Analyze this meal description: "${description}"\n\nIdentify every component the user named (or that's typical of the dish if generic). For dishes named without an explicit quantity (e.g. "salmon", "burger"), assume a typical single-serving portion. ${RULES}\n\n${SCHEMA_BLOCK}`),
   });
   const raw = cleanRaw(data.content.map(b => b.text || '').join(''));
   return { ...parseJson(raw), _modelUsed: data._modelUsed };

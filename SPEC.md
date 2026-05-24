@@ -50,22 +50,31 @@ The user selects a provider in Settings and enters their own API key. The key is
 
 ---
 
-## Two-Phase Food Analysis
+## Food Analysis
 
-To minimise AI calls and produce editable, predictable estimates, food analysis happens in two phases:
+A meal (image or text) is analysed in a single AI call that returns a per-component breakdown plus meal totals. This gives the model the freedom to enumerate every visible item (rice, protein, vegetables, sauces, oils, dressings, garnishes) rather than collapsing the plate to a single dominant food — the latter was the failure mode that made multi-component meals badly under-count protein/fat/calories.
 
-**Phase 1 — identify** (always runs)
-- Image or text → `{ name, amount, unit, ref_amount, ref_unit }`
-- The model picks a natural reference unit: grams (`ref_amount: 100, ref_unit: "g"`) for loose/bulk foods, or a countable unit (`ref_amount: 1, ref_unit: "egg"/"slice"/"cup"`) for discrete items
-- `max_tokens: 1024`, `_jsonResponse: true`
+**Request — `analyzeFood(image)` / `analyzeFoodText(description)`**
+- The prompt instructs the model to enumerate every component, estimate each portion in grams, be generous with sauces/oils/cooking fats, and sum macronutrients across components
+- `max_tokens: 4096`, `_jsonResponse: true` (4096 covers Gemini 2.5's thinking-token usage on top of the JSON content — 2048 silently truncated complex meals)
 
-**Phase 2 — per-unit macros** (only on cache miss)
-- `{ calories, protein, carbs, fat, fiber }` per `ref_amount` of `ref_unit`
-- Skipped entirely if a row exists in the user's `food_library` table with the same case-insensitive name; the cached macros are reused
+**Response schema**
 
-**Total macros displayed** = `(amount / ref_amount) × ref_macros`. Editing the amount on the review screen recalculates totals live without re-calling the AI.
+```json
+{
+  "name": "concise meal description",
+  "components": [{"name": "...", "amount": 200, "unit": "g"}, ...],
+  "amount": 380, "unit": "g",
+  "calories": 720, "protein": 38, "carbs": 65, "fat": 28, "fiber": 6
+}
+```
 
-If the user edits the per-unit macros on the review screen, the library row for that food is updated on save (`onUpdateLibrary`). Editing the amount or display name does not update the library.
+**Mapping to the review screen and DB**
+- Per-unit macros = totals scaled to 100 g (`refMacros = totals × 100 / amount`), so the editable card always shows "Per 100 g"
+- `refAmount = 100`, `refUnit = "g"`, `amount = totals.amount`. Editing the amount on the review screen rescales totals live without re-calling the AI
+- The components list is shown read-only above the amount card so the user can see what the model identified, but is not persisted to the log
+
+If the user edits the per-100g macros on the review screen, the library row for that food is updated on save (`onUpdateLibrary`). Editing the amount or display name does not update the library.
 
 ---
 
@@ -166,7 +175,7 @@ Indexed for case-insensitive uniqueness via `create unique index on food_library
 - Choose from gallery (no `capture` attribute)
 - Image resized to 300 px max on a canvas before upload; stored as a JPEG data URL thumbnail so it survives reloads
 - Preview screen before analysis
-- Spinner with two states: "Identifying food and amount…" (Phase 1) and "Looking up nutrition data…" (Phase 2)
+- Spinner shows "Analyzing meal components…" during the single combined analysis call
 
 **Text input**
 - Freetext field on the idle screen; submit with Enter or arrow button
@@ -174,8 +183,9 @@ Indexed for case-insensitive uniqueness via `create unique index on food_library
 
 **Review screen**
 - Editable meal name
+- Read-only "Components" card listing every item the AI identified (e.g. `rice (200 g) · chicken thigh (130 g) · broccoli (90 g)`) — gives the user transparency into the breakdown that produced the totals
 - Editable amount with unit label — changing it recalculates total macros live
-- Per-unit macros card labelled "Per {refAmount} {refUnit}" with 5 editable fields (calories, protein, carbs, fat, fiber); edits here update the user's `food_library` entry on save
+- Per-unit macros card labelled "Per {refAmount} {refUnit}" (typically "Per 100 g") with 5 editable fields (calories, protein, carbs, fat, fiber); edits here update the user's `food_library` entry on save
 - Read-only totals card: "Total for {amount} {unit}" with calories, protein, carbs, fat, fiber
 - AI model used shown next to the "AI estimate" badge
 - Save to log / Discard
@@ -282,7 +292,7 @@ Required environment variables on Vercel:
 
 Playwright tests under `e2e/` drive the live deployment end-to-end:
 
-- `e2e/snap_text.test.js` — Phase 1 + Phase 2 analysis from text, save to log, library cache hit on re-analyse
+- `e2e/snap_text.test.js` — single-call text analysis, save to log
 - `e2e/edit_log.test.js` — Edit amount/timestamp on a logged entry; verify macros rescale and persistence
 - `e2e/report_metrics.test.js` — Click each metric tile; verify chart switches metric
 

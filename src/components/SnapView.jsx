@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { identifyFood, identifyFoodText, getPerUnitMacros } from '../utils/api';
+import { analyzeFood, analyzeFoodText } from '../utils/api';
 
 const COLORS = { cal: '#1d9e75', protein: '#d4537e', carbs: '#378add', fat: '#ba7517', fiber: '#639922' };
 
@@ -28,11 +28,11 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   const [refAmount, setRefAmount] = useState(100);
   const [refUnit, setRefUnit] = useState('g');
   const [refMacros, setRefMacros] = useState({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+  const [components, setComponents] = useState([]);
   const [libraryDirty, setLibraryDirty] = useState(false);
   const [err, setErr] = useState(null);
   const [textInput, setTextInput] = useState('');
   const [modelUsed, setModelUsed] = useState(null);
-  const [phase, setPhase] = useState(null); // 'identifying' | 'fetching_macros'
 
   const macros = calcMacros(amount, refAmount, refMacros);
 
@@ -65,40 +65,45 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
     reader.readAsDataURL(f);
   };
 
-  const runAnalysis = async (phase1Fn) => {
+  const runAnalysis = async (analyzeFn) => {
     if (!localStorage.getItem('nutrisnap_api_key')) {
       setErr('No API key set. Go to Goals & Settings → AI Provider to add one.');
       return false;
     }
     setState('analyzing');
     setErr(null);
-    setPhase('identifying');
     try {
-      const p1 = await phase1Fn();
-      const name = p1.name || 'Meal';
-      const amt = p1.amount || 0;
-      const unit = p1.unit || 'g';
-      const rAmt = p1.ref_amount || 100;
-      const rUnit = p1.ref_unit || unit;
+      const a = await analyzeFn();
+      const name = a.name || 'Meal';
+      const amt = a.amount || 0;
+      const unit = a.unit || 'g';
+      const totals = {
+        calories: a.calories || 0,
+        protein: a.protein || 0,
+        carbs: a.carbs || 0,
+        fat: a.fat || 0,
+        fiber: a.fiber || 0,
+      };
+      // Convert totals → per-100g (or per-1 unit if non-gram) for the editable card.
+      const refAmt = unit === 'g' ? 100 : 1;
+      const ratio = amt > 0 ? refAmt / amt : 0;
+      const rm = {
+        calories: Math.round(totals.calories * ratio),
+        protein:  r1(totals.protein  * ratio),
+        carbs:    r1(totals.carbs    * ratio),
+        fat:      r1(totals.fat      * ratio),
+        fiber:    r1(totals.fiber    * ratio),
+      };
       setMealName(name);
       setAmount(amt);
       setAmountUnit(unit);
-      setRefAmount(rAmt);
-      setRefUnit(rUnit);
-      setModelUsed(p1._modelUsed || null);
+      setRefAmount(refAmt);
+      setRefUnit(unit);
+      setRefMacros(rm);
+      setComponents(Array.isArray(a.components) ? a.components : []);
+      setModelUsed(a._modelUsed || null);
       setLibraryDirty(false);
-
-      const cached = foodLibrary.find(f => f.name.toLowerCase() === name.toLowerCase());
-      if (cached) {
-        setRefMacros({ calories: cached.calories, protein: cached.protein, carbs: cached.carbs, fat: cached.fat, fiber: cached.fiber });
-      } else {
-        setPhase('fetching_macros');
-        const p2 = await getPerUnitMacros(name, rAmt, rUnit);
-        const rm = { calories: p2.calories || 0, protein: p2.protein || 0, carbs: p2.carbs || 0, fat: p2.fat || 0, fiber: p2.fiber || 0 };
-        setRefMacros(rm);
-        if (p2._modelUsed) setModelUsed(p2._modelUsed);
-        onSaveToLibrary({ name, refAmount: rAmt, refUnit: rUnit, ...rm });
-      }
+      onSaveToLibrary({ name, refAmount: refAmt, refUnit: unit, ...rm });
       setState('review');
       return true;
     } catch (e) {
@@ -108,13 +113,13 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   };
 
   const analyze = async () => {
-    const ok = await runAnalysis(() => identifyFood(imgB64, imgMime));
+    const ok = await runAnalysis(() => analyzeFood(imgB64, imgMime));
     if (!ok) setState('preview');
   };
 
   const analyzeText = async () => {
     if (!textInput.trim()) return;
-    const ok = await runAnalysis(() => identifyFoodText(textInput.trim()));
+    const ok = await runAnalysis(() => analyzeFoodText(textInput.trim()));
     if (!ok) setState('idle');
   };
 
@@ -139,7 +144,8 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
     setState('idle'); setImgUrl(null); setImgThumb(null); setImgB64(null);
     setMealName(''); setAmount(0); setAmountUnit('g'); setRefAmount(100); setRefUnit('g');
     setRefMacros({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
-    setLibraryDirty(false); setErr(null); setTextInput(''); setModelUsed(null); setPhase(null);
+    setComponents([]);
+    setLibraryDirty(false); setErr(null); setTextInput(''); setModelUsed(null);
   };
 
   // Deduplicated recent meals — latest entry per unique name, up to 5
@@ -267,7 +273,7 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
       {imgUrl && <img src={imgUrl} alt="" style={{ width: '100%', borderRadius: 14, maxHeight: 260, objectFit: 'cover' }} />}
       <div style={{ width: 44, height: 44, border: '3px solid #e0f5ed', borderTopColor: '#1d9e75', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
       <p style={{ fontSize: 15, fontWeight: 600, color: '#666', textAlign: 'center' }}>
-        {phase === 'fetching_macros' ? 'Looking up nutrition data…' : 'Identifying food and amount…'}
+        Analyzing meal components…
       </p>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
@@ -290,8 +296,23 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
       <input
         value={mealName} onChange={e => setMealName(e.target.value)}
         placeholder="Meal name"
-        style={{ width: '100%', fontSize: 18, fontWeight: 700, border: 'none', borderBottom: '2px solid #1d9e75', background: 'transparent', outline: 'none', paddingBottom: 6, marginBottom: 20, color: 'inherit' }}
+        style={{ width: '100%', fontSize: 18, fontWeight: 700, border: 'none', borderBottom: '2px solid #1d9e75', background: 'transparent', outline: 'none', paddingBottom: 6, marginBottom: 14, color: 'inherit' }}
       />
+
+      {/* Components the AI identified */}
+      {components.length > 0 && (
+        <div style={{ marginBottom: 14, padding: '10px 12px', background: '#f5f5f0', borderRadius: 10, border: '0.5px solid rgba(0,0,0,.07)' }}>
+          <div style={{ fontSize: 10, color: '#888', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Components</div>
+          <div style={{ fontSize: 12, color: '#555', lineHeight: 1.5 }}>
+            {components.map((c, i) => (
+              <span key={i}>
+                {c.name} <span style={{ color: '#999' }}>({c.amount} {c.unit || 'g'})</span>
+                {i < components.length - 1 && <span style={{ color: '#bbb' }}> · </span>}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Amount */}
       <div style={{ background: '#f5f5f0', borderRadius: 12, padding: '12px 14px', marginBottom: 12, border: '0.5px solid rgba(0,0,0,.07)' }}>

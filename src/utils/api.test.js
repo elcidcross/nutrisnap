@@ -4,38 +4,42 @@ const { parseJson } = require('./api');
 
 describe('parseJson', () => {
   test('recovers from `{[...]` corruption (prefill + array response)', () => {
-    const raw = '{[ { "name": "rice bowl with natto, okra, and shirasu", "amount": 380, "unit": "g", "ref_amount": 100, "ref_unit": "g" } ]';
+    const raw = '{[ { "name": "rice bowl", "components": [{"name":"rice","amount":200,"unit":"g"}], "amount": 380, "unit": "g", "calories": 520, "protein": 18, "carbs": 70, "fat": 12, "fiber": 4 } ]';
     expect(parseJson(raw)).toEqual({
-      name: 'rice bowl with natto, okra, and shirasu',
-      amount: 380,
-      unit: 'g',
-      ref_amount: 100,
-      ref_unit: 'g',
+      name: 'rice bowl',
+      components: [{ name: 'rice', amount: 200, unit: 'g' }],
+      amount: 380, unit: 'g',
+      calories: 520, protein: 18, carbs: 70, fat: 12, fiber: 4,
     });
   });
 
-  test('parses a normal object response', () => {
-    const raw = '{"name":"apple","amount":150,"unit":"g","ref_amount":100,"ref_unit":"g"}';
+  test('parses a normal multi-component analysis response', () => {
+    const raw = '{"name":"chicken rice bowl","components":[{"name":"rice","amount":200,"unit":"g"},{"name":"chicken thigh","amount":120,"unit":"g"}],"amount":320,"unit":"g","calories":600,"protein":35,"carbs":68,"fat":18,"fiber":2}';
     expect(parseJson(raw)).toEqual({
-      name: 'apple', amount: 150, unit: 'g', ref_amount: 100, ref_unit: 'g',
+      name: 'chicken rice bowl',
+      components: [
+        { name: 'rice', amount: 200, unit: 'g' },
+        { name: 'chicken thigh', amount: 120, unit: 'g' },
+      ],
+      amount: 320, unit: 'g',
+      calories: 600, protein: 35, carbs: 68, fat: 18, fiber: 2,
     });
   });
 
   test('unwraps a single-element array response', () => {
-    const raw = '[{"name":"banana","amount":120,"unit":"g"}]';
-    expect(parseJson(raw)).toEqual({ name: 'banana', amount: 120, unit: 'g' });
-  });
-
-  test('parses a Phase 2 macros response', () => {
-    const raw = '{"calories":57,"protein":0.7,"carbs":14.5,"fat":0.3,"fiber":2.4}';
+    const raw = '[{"name":"banana","amount":120,"unit":"g","calories":107,"protein":1.3,"carbs":27,"fat":0.4,"fiber":3}]';
     expect(parseJson(raw)).toEqual({
-      calories: 57, protein: 0.7, carbs: 14.5, fat: 0.3, fiber: 2.4,
+      name: 'banana', amount: 120, unit: 'g',
+      calories: 107, protein: 1.3, carbs: 27, fat: 0.4, fiber: 3,
     });
   });
 
   test('normalizes single quotes to double quotes', () => {
-    const raw = "{'name':'pear','amount':100,'unit':'g'}";
-    expect(parseJson(raw)).toEqual({ name: 'pear', amount: 100, unit: 'g' });
+    const raw = "{'name':'pear','amount':100,'unit':'g','calories':57,'protein':0.4,'carbs':15,'fat':0.1,'fiber':3.1}";
+    expect(parseJson(raw)).toEqual({
+      name: 'pear', amount: 100, unit: 'g',
+      calories: 57, protein: 0.4, carbs: 15, fat: 0.1, fiber: 3.1,
+    });
   });
 
   test('throws on an unparseable response', () => {

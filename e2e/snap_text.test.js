@@ -1,4 +1,4 @@
-// Phase 1 + Phase 2 text-input analysis, save to log, library cache hit on re-analyze.
+// Single-call text-input analysis: identify components, estimate totals, save to log.
 const { newBrowser, signUpFreshUser, logSalmonByText, assert } = require('./_helpers');
 
 (async () => {
@@ -6,29 +6,24 @@ const { newBrowser, signUpFreshUser, logSalmonByText, assert } = require('./_hel
   try {
     await signUpFreshUser(page, 'snap_text');
 
-    let phase2Calls = 0;
+    let analysisCalls = 0;
     page.on('request', req => {
       if (req.url().includes('/api/claude')) {
         const body = req.postData() || '';
-        if (body.includes('macronutrients for')) phase2Calls++;
+        if (body.includes('Analyze this meal description')) analysisCalls++;
       }
     });
 
     await logSalmonByText(page);
 
-    // First analysis — Phase 2 must have run (no cache yet)
-    assert(phase2Calls === 1, `Phase 2 called once on first analysis (got ${phase2Calls})`);
+    // Single combined call replaces the old two-phase flow
+    assert(analysisCalls === 1, `Analysis called exactly once on first request (got ${analysisCalls})`);
 
     await page.click('button:has-text("Save to log")');
     await page.waitForTimeout(2000);
 
     const logTxt = await page.evaluate(() => document.body.innerText);
-    assert(/salmon/i.test(logTxt) && logTxt.includes('208 kcal'), 'Salmon entry visible in log with 208 kcal');
-
-    // Re-analyze — must NOT call Phase 2 (library cache hit)
-    phase2Calls = 0;
-    await logSalmonByText(page);
-    assert(phase2Calls === 0, `Phase 2 skipped on cached re-analysis (got ${phase2Calls})`);
+    assert(/salmon/i.test(logTxt) && /\d+\s*kcal/i.test(logTxt), 'Salmon entry visible in log with a kcal value');
   } finally {
     await browser.close();
   }
