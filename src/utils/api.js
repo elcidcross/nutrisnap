@@ -175,12 +175,28 @@ export async function getNudge(todayTotals, goals) {
   if (Object.keys(gaps).length === 0) return { text: "You've hit all your goals today! Great work.", gaps: {} };
 
   const hour = new Date().getHours();
-  const mealCtx = hour < 11 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 19 ? 'afternoon snack' : 'dinner';
-  const prompt = `User nutrition gaps today: ${JSON.stringify(gaps)}. Meal context: ${mealCtx}. Write a single short, friendly, specific nudge (1-2 sentences, max 30 words) suggesting a specific food to eat RIGHT NOW to close the most important gap. Be direct and concrete like: "You need 25g more protein — grab a boiled egg and some chicken breast now!" Return ONLY the nudge text.`;
+  const mealCtx = hour < 11 ? 'breakfast' : hour < 14 ? 'lunch' : hour < 17 ? 'afternoon snack' : hour < 21 ? 'dinner' : 'late evening';
+  const remainingMeals = hour < 11 ? 'breakfast, lunch, and dinner' : hour < 14 ? 'lunch and dinner' : hour < 17 ? 'a snack and dinner' : hour < 21 ? 'dinner' : 'a small late snack';
+
+  const prompt = `You're a nutrition coach. The user logs meals throughout the day and needs concrete advice on what to eat to close their remaining nutrition gaps before bed.
+
+Remaining gaps today (what they still need on top of what they've eaten):
+${JSON.stringify(gaps)}
+
+Time now: ${hour}:00 (${mealCtx}). Meals left to use: ${remainingMeals}.
+
+Write a single, specific recommendation in 2-3 short sentences (max 60 words). You MUST include:
+1. **Specific foods with portion sizes in grams or standard units** — not vague ("chicken") but exact ("180g grilled chicken breast", "2 large eggs", "1 cup Greek yogurt").
+2. **What it adds**, in grams, so the user can see how it dents the gap (e.g. "~45g protein, 8g fat").
+3. **When to eat it** — now / with ${mealCtx} / before bed.
+
+Prioritize the largest gap first. If protein is the gap, lead with high-protein whole foods (chicken breast, Greek yogurt, eggs, cottage cheese, tuna, lentils). If calories are also short, pair with a calorie-dense side (rice, oats, avocado, nuts, olive oil). Avoid generic phrases like "a balanced meal" or "some protein" — always name foods and grams.
+
+Return ONLY the recommendation text. No preamble, no markdown, no quotation marks.`;
 
   const data = await callClaude({
     model: getModel(),
-    max_tokens: 200,
+    max_tokens: 4096,
     messages: [{ role: 'user', content: prompt }]
   });
   return { text: data.content.map(b => b.text || '').join('').trim(), gaps };
