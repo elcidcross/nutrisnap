@@ -5,7 +5,7 @@
 NutriSnap is a mobile-first progressive web app (PWA) for tracking daily nutrition. Users photograph meals or type descriptions to get instant AI-estimated macros. All logs, goals, and the per-user food library are stored in Supabase so data syncs across devices. The app tracks progress against user-defined goals and offers AI-generated nudges throughout the day.
 
 Live: https://nutrisnap-lovat.vercel.app
-Version: 1.1.1
+Version: 1.2.0
 
 ---
 
