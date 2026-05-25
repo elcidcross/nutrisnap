@@ -266,8 +266,14 @@ Internal fields are stripped before forwarding. The response always includes `_m
 ## Build & Deploy
 
 ```
-# Local dev
+# Local dev (UI only)
 npm start
+
+# Local dev WITH the /api/claude proxy (needed to test AI analysis locally)
+# `npm start` can't serve the serverless function, so AI calls 404. Use vercel dev,
+# and source .env.local first so the function inherits SUPABASE_URL / SUPABASE_ANON_KEY
+# (vercel dev does not auto-load .env.local into serverless functions).
+set -a; source .env.local; set +a; vercel dev --listen 3000
 
 # Production deploy (after `npm version <bump>`)
 vercel --prod
