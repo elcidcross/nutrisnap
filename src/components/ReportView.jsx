@@ -37,6 +37,18 @@ export default function ReportView({ logs, goalsHistory }) {
     carbs: a.carbs + (l.carbs || 0), fat: a.fat + (l.fat || 0),
   }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
 
+  // Target for a metric summed across the selected period, respecting the
+  // goal that was active on each day.
+  const periodTarget = (m) => {
+    if (period === 'day') return goalsAtDate(Date.now(), goalsHistory)[m];
+    const days = period === 'week'
+      ? { start: swStart(), n: 7 }
+      : { start: smStart(), n: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate() };
+    let sum = 0;
+    for (let i = 0; i < days.n; i++) sum += goalsAtDate(days.start + i * 86400000 + 43200000, goalsHistory)[m];
+    return sum;
+  };
+
   const buildData = useCallback(() => {
     const sumAt = (start, end) => logs
       .filter(l => l.timestamp >= start && l.timestamp < end)
@@ -127,7 +139,7 @@ export default function ReportView({ logs, goalsHistory }) {
                 transition: 'background .15s, border-color .15s',
               }}>
               <div style={{ fontSize: 16, fontWeight: 700, color: c }}>{val}</div>
-              <div style={{ fontSize: 10, color: '#999', marginTop: 2 }}>{lbl}</div>
+              <div style={{ fontSize: 9, color: '#aaa', marginTop: 1, fontWeight: 600 }}>/ {Math.round(periodTarget(key))} {lbl}</div>
             </button>
           );
         })}

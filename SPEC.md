@@ -199,7 +199,7 @@ Indexed for case-insensitive uniqueness via `create unique index on food_library
 ### Reports tab
 
 - Period selector: Day / Week / Month
-- Four macro tiles (calories, protein, carbs, fat) — **clickable**; selecting one sets the chart metric and highlights the active tile with a tinted border
+- Four macro tiles (calories, protein, carbs, fat) — **clickable**; selecting one sets the chart metric and highlights the active tile with a tinted border. Each tile shows the period total over its target on a small second line (e.g. `0 / 210 kcal`); the target is the daily goal summed across the selected period (1 day / 7 days / days-in-month), respecting goal changes per day
 - Bar chart of the selected metric per hour (day) or per day (week/month), with a dashed goal line
 - Goal line reflects the goal that was active on each specific day (from `goals_history`)
 - Tooltip and y-axis units adapt to the selected metric (`kcal` vs `g`)
