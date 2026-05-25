@@ -16,3 +16,5 @@
 - [x] BUG: editing a logged item's amount — clearing all digits then retyping fails to repopulate calories/macros
 - [x] BUG: after snapping, clearing all digits in the amount field shows a leading zero (cosmetic only)
 - [x] Reports: show the target alongside each bubble value (e.g. "0 / 210 kcal"), target on a small second line
+- [x] Reports: navigate to previous/next period (step the day/week/month being viewed)
+- [x] Reports: show all four metric charts at once (stacked), replacing the metric selector; Day x-axis in 24h time

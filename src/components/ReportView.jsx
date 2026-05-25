@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Chart, registerables } from 'chart.js';
 import { goalsAtDate } from '../utils/storage';
 
@@ -64,12 +64,93 @@ function periodLabel(period, offset, start) {
   return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
+// Per-metric chart series for the viewed window: hourly buckets (day) or
+// daily buckets (week/month), plus the per-bucket goal line.
+function buildSeries(metricKey, period, offset, logs, goalsHistory) {
+  const w = periodWindow(period, offset);
+  const sumAt = (start, end) => logs
+    .filter(l => l.timestamp >= start && l.timestamp < end)
+    .reduce((s, l) => s + (l[metricKey] || 0), 0);
+
+  if (period === 'day') {
+    const hrs = Array.from({ length: 24 }, (_, i) => i);
+    const dayGoal = goalsAtDate(w.start + 43200000, goalsHistory)[metricKey];
+    return {
+      labels: hrs.map(h => String(h).padStart(2, '0') + ':00'),
+      data: hrs.map(h => sumAt(w.start + h * 3600000, w.start + (h + 1) * 3600000)),
+      goalData: hrs.map(() => dayGoal),
+    };
+  }
+  if (period === 'week') {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return {
+      labels: days,
+      data: days.map((_, i) => sumAt(w.start + i * DAY, w.start + (i + 1) * DAY)),
+      goalData: days.map((_, i) => goalsAtDate(w.start + i * DAY + 43200000, goalsHistory)[metricKey]),
+    };
+  }
+  return {
+    labels: Array.from({ length: w.buckets }, (_, i) => i + 1),
+    data: Array.from({ length: w.buckets }, (_, i) => sumAt(w.start + i * DAY, w.start + (i + 1) * DAY)),
+    goalData: Array.from({ length: w.buckets }, (_, i) => goalsAtDate(w.start + i * DAY + 43200000, goalsHistory)[metricKey]),
+  };
+}
+
+// One compact labelled chart for a single metric.
+function MetricChart({ metricKey, period, offset, logs, goalsHistory, total, target }) {
+  const ref = useRef(null);
+  const inst = useRef(null);
+  const m = METRICS[metricKey];
+  const totalStr = metricKey === 'calories' ? Math.round(total) : total.toFixed(1);
+
+  useEffect(() => {
+    if (!ref.current) return;
+    if (inst.current) inst.current.destroy();
+    const { labels, data, goalData } = buildSeries(metricKey, period, offset, logs, goalsHistory);
+    const isDark = matchMedia('(prefers-color-scheme:dark)').matches;
+    const fmtVal = metricKey === 'calories' ? Math.round : (v => Math.round(v * 10) / 10);
+    inst.current = new Chart(ref.current, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: m.label, data, backgroundColor: hexToRgba(m.color, 0.65), borderRadius: 4, borderSkipped: false },
+          { label: 'Goal', data: goalData, type: 'line', borderColor: 'rgba(170,170,170,.7)', borderDash: [5, 3], borderWidth: 1.5, pointRadius: 0, fill: false },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: v => `${v.dataset.label}: ${fmtVal(v.raw)} ${m.unit}` } } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 }, maxTicksLimit: period === 'month' ? 10 : period === 'day' ? 12 : undefined } },
+          y: { grid: { color: isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)' }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 }, callback: v => v > 0 ? v : '' } },
+        },
+      },
+    });
+    return () => { if (inst.current) inst.current.destroy(); };
+  }, [metricKey, period, offset, logs, goalsHistory, m.label, m.unit, m.color]);
+
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: m.color }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: hexToRgba(m.color, 0.65), display: 'inline-block' }} />
+          {m.label}
+        </span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: m.color }}>
+          {totalStr} <span style={{ color: '#aaa', fontWeight: 600 }}>/ {Math.round(target)} {m.unit}</span>
+        </span>
+      </div>
+      <div style={{ height: 220, position: 'relative' }}>
+        <canvas ref={ref} role="img" aria-label={`${m.label} intake with goal line`} />
+      </div>
+    </div>
+  );
+}
+
 export default function ReportView({ logs, goalsHistory }) {
   const [period, setPeriod] = useState('day');
   const [offset, setOffset] = useState(0);
-  const [metric, setMetric] = useState('calories');
-  const chartRef = useRef(null);
-  const chartInst = useRef(null);
 
   const win = periodWindow(period, offset);
 
@@ -90,64 +171,6 @@ export default function ReportView({ logs, goalsHistory }) {
     return sum;
   };
 
-  const buildData = useCallback(() => {
-    const w = periodWindow(period, offset);
-    const sumAt = (start, end) => logs
-      .filter(l => l.timestamp >= start && l.timestamp < end)
-      .reduce((s, l) => s + (l[metric] || 0), 0);
-
-    if (period === 'day') {
-      const hrs = Array.from({ length: 24 }, (_, i) => i);
-      const dayGoal = goalsAtDate(w.start + 43200000, goalsHistory)[metric];
-      return {
-        labels: hrs.map(h => h === 0 ? '12a' : h < 12 ? h + 'a' : h === 12 ? '12p' : (h - 12) + 'p'),
-        data: hrs.map(h => sumAt(w.start + h * 3600000, w.start + (h + 1) * 3600000)),
-        goalData: hrs.map(() => dayGoal),
-      };
-    }
-    if (period === 'week') {
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      return {
-        labels: days,
-        data: days.map((_, i) => sumAt(w.start + i * DAY, w.start + (i + 1) * DAY)),
-        goalData: days.map((_, i) => goalsAtDate(w.start + i * DAY + 43200000, goalsHistory)[metric]),
-      };
-    }
-    return {
-      labels: Array.from({ length: w.buckets }, (_, i) => i + 1),
-      data: Array.from({ length: w.buckets }, (_, i) => sumAt(w.start + i * DAY, w.start + (i + 1) * DAY)),
-      goalData: Array.from({ length: w.buckets }, (_, i) => goalsAtDate(w.start + i * DAY + 43200000, goalsHistory)[metric]),
-    };
-  }, [logs, period, offset, goalsHistory, metric]);
-
-  useEffect(() => {
-    if (!chartRef.current) return;
-    if (chartInst.current) chartInst.current.destroy();
-    const { labels, data, goalData } = buildData();
-    const m = METRICS[metric];
-    const isDark = matchMedia('(prefers-color-scheme:dark)').matches;
-    const fmtVal = metric === 'calories' ? Math.round : (v => Math.round(v * 10) / 10);
-    chartInst.current = new Chart(chartRef.current, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          { label: m.label, data, backgroundColor: hexToRgba(m.color, 0.65), borderRadius: 4, borderSkipped: false },
-          { label: 'Goal', data: goalData, type: 'line', borderColor: 'rgba(170,170,170,.7)', borderDash: [5, 3], borderWidth: 1.5, pointRadius: 0, fill: false },
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: v => `${v.dataset.label}: ${fmtVal(v.raw)} ${m.unit}` } } },
-        scales: {
-          x: { grid: { display: false }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 }, maxTicksLimit: period === 'month' ? 10 : undefined } },
-          y: { grid: { color: isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)' }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 }, callback: v => v > 0 ? v : '' } }
-        }
-      }
-    });
-    return () => { if (chartInst.current) chartInst.current.destroy(); };
-  }, [buildData, period, metric]);
-
   return (
     <div>
       {/* Period tabs */}
@@ -161,7 +184,7 @@ export default function ReportView({ logs, goalsHistory }) {
       </div>
 
       {/* Period navigation */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px 14px', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 16px 12px', gap: 8 }}>
         <button onClick={() => setOffset(o => o - 1)} aria-label="Previous period"
           style={{ width: 34, height: 34, borderRadius: 8, border: 'none', background: '#f5f5f0', color: '#666', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <i className="ti ti-chevron-left" />
@@ -176,40 +199,12 @@ export default function ReportView({ logs, goalsHistory }) {
         </button>
       </div>
 
-      {/* Totals — click to graph that metric */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, padding: '0 16px 16px' }}>
-        {[
-          ['calories', 'kcal',    Math.round(totals.calories)],
-          ['protein',  'protein', totals.protein.toFixed(1) + 'g'],
-          ['carbs',    'carbs',   totals.carbs.toFixed(1) + 'g'],
-          ['fat',      'fat',     totals.fat.toFixed(1) + 'g'],
-        ].map(([key, lbl, val]) => {
-          const c = METRICS[key].color;
-          const active = metric === key;
-          return (
-            <button key={key} onClick={() => setMetric(key)} aria-pressed={active}
-              style={{
-                background: active ? hexToRgba(c, 0.12) : '#f5f5f0',
-                border: active ? `1.5px solid ${c}` : '1.5px solid transparent',
-                borderRadius: 10, padding: 10, textAlign: 'center', cursor: 'pointer',
-                transition: 'background .15s, border-color .15s',
-              }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: c }}>{val}</div>
-              <div style={{ fontSize: 9, color: '#aaa', marginTop: 1, fontWeight: 600 }}>/ {Math.round(periodTarget(key))} {lbl}</div>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Legend */}
-      <div style={{ display: 'flex', gap: 16, padding: '0 16px 8px', fontSize: 12 }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: hexToRgba(METRICS[metric].color, 0.65), display: 'inline-block' }} /><span style={{ color: '#888' }}>{METRICS[metric].label}</span></span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 18, height: 2, background: 'rgba(170,170,170,.7)', display: 'inline-block' }} /><span style={{ color: '#888' }}>Goal</span></span>
-      </div>
-
-      {/* Chart */}
-      <div style={{ padding: '0 16px 20px', height: 220, position: 'relative' }}>
-        <canvas id="reportChart" ref={chartRef} role="img" aria-label={`${METRICS[metric].label} intake by ${period} with goal line`} />
+      {/* One chart per metric */}
+      <div style={{ padding: '0 16px 20px' }}>
+        {Object.keys(METRICS).map(key => (
+          <MetricChart key={key} metricKey={key} period={period} offset={offset}
+            logs={logs} goalsHistory={goalsHistory} total={totals[key]} target={periodTarget(key)} />
+        ))}
       </div>
     </div>
   );
