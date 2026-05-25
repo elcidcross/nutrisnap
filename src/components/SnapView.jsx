@@ -130,7 +130,7 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
       name: mealName,
       imageUrl: imgThumb || imgUrl,
       model: modelUsed,
-      amount,
+      amount: +amount || 0,
       unit: amountUnit,
       refAmount,
       refUnit,
@@ -330,7 +330,7 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <input
             type="number" value={amount} min={0} step={0.1}
-            onChange={e => setAmount(+e.target.value)}
+            onChange={e => setAmount(e.target.value === '' ? '' : +e.target.value)}
             style={{ fontSize: 28, fontWeight: 700, border: 'none', background: 'transparent', color: 'inherit', outline: 'none', width: 100 }}
           />
           <span style={{ fontSize: 16, color: '#888', fontWeight: 600 }}>{amountUnit}</span>
