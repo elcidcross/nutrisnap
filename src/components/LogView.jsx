@@ -105,6 +105,7 @@ function r1(n) { return Math.round(n * 10) / 10; }
 function LogEntry({ entry, onDelete, onEdit }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
+  const [zoomed, setZoomed] = useState(false);
 
   const startEdit = () => {
     setDraft({
@@ -198,11 +199,26 @@ function LogEntry({ entry, onDelete, onEdit }) {
 
   return (
     <div style={{ padding: '14px 16px', borderBottom: '0.5px solid rgba(0,0,0,.07)', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-      <div style={{ width: 54, height: 54, borderRadius: 10, overflow: 'hidden', background: '#f0f0ea', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        {entry.imageUrl
-          ? <img src={entry.imageUrl} alt={entry.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          : <i className="ti ti-salad" style={{ fontSize: 20, color: '#ccc' }} aria-hidden="true" />}
-      </div>
+      {entry.imageUrl ? (
+        <button onClick={() => setZoomed(true)} aria-label="Expand photo"
+          style={{ width: 54, height: 54, borderRadius: 10, overflow: 'hidden', background: '#f0f0ea', flexShrink: 0, border: 'none', padding: 0, cursor: 'pointer' }}>
+          <img src={entry.imageUrl} alt={entry.name} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+        </button>
+      ) : (
+        <div style={{ width: 54, height: 54, borderRadius: 10, overflow: 'hidden', background: '#f0f0ea', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <i className="ti ti-salad" style={{ fontSize: 20, color: '#ccc' }} aria-hidden="true" />
+        </div>
+      )}
+      {zoomed && (
+        <div onClick={() => setZoomed(false)} role="dialog" aria-label="Photo"
+          style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <img src={entry.imageUrl} alt={entry.name} style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: 12, objectFit: 'contain' }} />
+          <button onClick={() => setZoomed(false)} aria-label="Close"
+            style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top) + 16px)', right: 20, background: 'rgba(0,0,0,.5)', border: 'none', color: '#fff', fontSize: 24, width: 40, height: 40, borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <i className="ti ti-x" />
+          </button>
+        </div>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.name}</div>
         <div style={{ fontSize: 11, color: '#999', marginBottom: 6 }}>

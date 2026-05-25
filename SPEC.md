@@ -164,6 +164,7 @@ Indexed for case-insensitive uniqueness via `create unique index on food_library
 - AI nudge card: generated on first visit if any meals are logged today; can be refreshed manually; dismissed per session
 - Meal log grouped by day, newest first
 - Each entry shows: thumbnail (or food icon), name, amount + unit (when present), time, macros, AI model used, calorie count
+- Tapping an entry's thumbnail opens a fullscreen overlay of the photo; tap anywhere or the close button to dismiss
 - Inline edit: tap pencil to edit name, amount, timestamp, and macros. Changing the amount proportionally rescales calories and macros so the user doesn't have to do the math.
 - Delete entry with trash icon
 - Badge on the Goals tab nav item when protein or calorie gap is significant
