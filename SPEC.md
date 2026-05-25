@@ -192,7 +192,7 @@ Indexed for case-insensitive uniqueness via `create unique index on food_library
 - Save to log / Discard
 
 **Recent meals**
-- Deduped by name, up to 5 most recent unique meals
+- Deduped by name, unique meals from the last 3 calendar days (today + previous 2), up to 15
 - Shows thumbnail, name, amount + unit, calories, protein, AI model used
 - Tap to instantly re-log with a new timestamp (same macros, new ID)
 

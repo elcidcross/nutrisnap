@@ -148,13 +148,23 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
     setLibraryDirty(false); setErr(null); setTextInput(''); setModelUsed(null);
   };
 
-  // Deduplicated recent meals — latest entry per unique name, up to 5
+  // Deduplicated recent meals — latest entry per unique name from the last
+  // 3 calendar days (today + previous 2), up to 15. You're more likely to
+  // repeat yesterday's meal than eat the same thing twice in one day.
   const recentMeals = (() => {
+    const cutoff = new Date();
+    cutoff.setHours(0, 0, 0, 0);
+    cutoff.setDate(cutoff.getDate() - 2);
+    const cutoffMs = cutoff.getTime();
     const seen = new Set();
-    return [...logs].sort((a, b) => b.timestamp - a.timestamp).filter(l => {
-      if (seen.has(l.name)) return false;
-      seen.add(l.name); return true;
-    }).slice(0, 5);
+    return [...logs]
+      .filter(l => l.timestamp >= cutoffMs)
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .filter(l => {
+        if (seen.has(l.name)) return false;
+        seen.add(l.name); return true;
+      })
+      .slice(0, 15);
   })();
 
   const relog = (meal) => {
