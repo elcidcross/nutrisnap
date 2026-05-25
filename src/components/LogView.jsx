@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Ring from './Ring';
 import ProgressBar from './ProgressBar';
 import NudgeCard from './NudgeCard';
@@ -107,6 +107,10 @@ function LogEntry({ entry, onDelete, onEdit }) {
   const [draft, setDraft] = useState({});
   const [zoomed, setZoomed] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  // Fixed anchor for proportional rescaling: macros at a known amount.
+  // Anchoring on this (rather than the previous amount) means clearing the
+  // amount field to empty doesn't lose the reference, so retyping recomputes.
+  const base = useRef({ amount: 0, calories: 0, protein: 0, carbs: 0, fat: 0 });
 
   const startEdit = () => {
     setDraft({
@@ -118,26 +122,49 @@ function LogEntry({ entry, onDelete, onEdit }) {
       carbs: entry.carbs,
       fat: entry.fat,
     });
+    base.current = {
+      amount: +entry.amount || 0,
+      calories: +entry.calories || 0,
+      protein: +entry.protein || 0,
+      carbs: +entry.carbs || 0,
+      fat: +entry.fat || 0,
+    };
     setEditing(true);
   };
 
-  // Changing amount rescales all macros proportionally
+  // Changing amount rescales all macros proportionally from the fixed base.
   const changeAmount = (newAmt) => {
-    const prev = +draft.amount;
     const next = +newAmt;
-    if (prev > 0 && next >= 0 && !Number.isNaN(next)) {
-      const ratio = next / prev;
+    const b = base.current;
+    if (newAmt !== '' && next >= 0 && !Number.isNaN(next) && b.amount > 0) {
+      const ratio = next / b.amount;
       setDraft(d => ({
         ...d,
         amount: newAmt,
-        calories: Math.round(+d.calories * ratio),
-        protein: r1(+d.protein * ratio),
-        carbs: r1(+d.carbs * ratio),
-        fat: r1(+d.fat * ratio),
+        calories: Math.round(b.calories * ratio),
+        protein: r1(b.protein * ratio),
+        carbs: r1(b.carbs * ratio),
+        fat: r1(b.fat * ratio),
       }));
     } else {
       setDraft(d => ({ ...d, amount: newAmt }));
     }
+  };
+
+  // Editing a macro directly re-anchors the base so subsequent amount
+  // changes scale from the corrected value.
+  const changeMacro = (key, val) => {
+    setDraft(d => {
+      const nd = { ...d, [key]: val };
+      base.current = {
+        amount: nd.amount === '' ? base.current.amount : (+nd.amount || 0),
+        calories: +nd.calories || 0,
+        protein: +nd.protein || 0,
+        carbs: +nd.carbs || 0,
+        fat: +nd.fat || 0,
+      };
+      return nd;
+    });
   };
 
   const save = () => {
@@ -158,7 +185,7 @@ function LogEntry({ entry, onDelete, onEdit }) {
     <div style={{ flex: 1 }}>
       <div style={{ fontSize: 10, color, fontWeight: 700, marginBottom: 3 }}>{label}</div>
       <input type="number" value={draft[key]} min={0} step={0.1}
-        onChange={e => setDraft(d => ({ ...d, [key]: e.target.value }))}
+        onChange={e => changeMacro(key, e.target.value)}
         style={{ width: '100%', fontSize: 14, fontWeight: 700, border: 'none', borderBottom: `2px solid ${color}`, background: 'transparent', outline: 'none', color: 'inherit', paddingBottom: 2 }} />
     </div>
   );
