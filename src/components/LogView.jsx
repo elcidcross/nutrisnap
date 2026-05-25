@@ -106,6 +106,7 @@ function LogEntry({ entry, onDelete, onEdit }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
   const [zoomed, setZoomed] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const startEdit = () => {
     setDraft({
@@ -238,10 +239,28 @@ function LogEntry({ entry, onDelete, onEdit }) {
         style={{ background: 'none', border: 'none', color: '#ccc', fontSize: 17, padding: 4, flexShrink: 0, cursor: 'pointer' }}>
         <i className="ti ti-pencil" />
       </button>
-      <button onClick={() => onDelete(entry.id)} aria-label="Delete entry"
+      <button onClick={() => setConfirmingDelete(true)} aria-label="Delete entry"
         style={{ background: 'none', border: 'none', color: '#ccc', fontSize: 17, padding: 4, flexShrink: 0, cursor: 'pointer' }}>
         <i className="ti ti-trash" />
       </button>
+      {confirmingDelete && (
+        <div onClick={() => setConfirmingDelete(false)} role="dialog" aria-modal="true" aria-label="Confirm delete"
+          style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: '100%', maxWidth: 320, background: '#fff', borderRadius: 16, padding: 20, boxShadow: '0 8px 32px rgba(0,0,0,.25)' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Delete this entry?</div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 18, lineHeight: 1.5 }}>
+              "{entry.name}" will be permanently removed from your log.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setConfirmingDelete(false)}
+                style={{ flex: 1, padding: '11px 0', borderRadius: 10, fontSize: 14, fontWeight: 700, border: 'none', background: '#f0f0ea', color: 'inherit', cursor: 'pointer' }}>Cancel</button>
+              <button onClick={() => { setConfirmingDelete(false); onDelete(entry.id); }}
+                style={{ flex: 1, padding: '11px 0', borderRadius: 10, fontSize: 14, fontWeight: 700, border: 'none', background: '#e24b4a', color: '#fff', cursor: 'pointer' }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
