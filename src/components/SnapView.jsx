@@ -415,7 +415,6 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
             ['protein',  'Protein',  'g',    COLORS.protein],
             ['carbs',    'Carbs',    'g',    COLORS.carbs],
             ['fat',      'Fat',      'g',    COLORS.fat],
-            ['fiber',    'Fiber',    'g',    COLORS.fiber],
           ].map(([k, lbl, unit, color]) => (
             <div key={k} style={{ background: '#fff', borderRadius: 8, padding: '8px 10px', border: '0.5px solid rgba(0,0,0,.07)' }}>
               <div style={{ fontSize: 10, color: '#888', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -442,7 +441,7 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
         <div style={{ background: '#e1f5ee', borderRadius: 12, padding: 14, border: '0.5px solid rgba(29,158,117,.2)' }}>
           <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.cal, marginBottom: 6 }}>{macros.calories} <span style={{ fontSize: 14, fontWeight: 600 }}>kcal</span></div>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            {[['Protein', macros.protein, COLORS.protein], ['Carbs', macros.carbs, COLORS.carbs], ['Fat', macros.fat, COLORS.fat], ['Fiber', macros.fiber, COLORS.fiber]].map(([lbl, val, color]) => (
+            {[['Protein', macros.protein, COLORS.protein], ['Carbs', macros.carbs, COLORS.carbs], ['Fat', macros.fat, COLORS.fat]].map(([lbl, val, color]) => (
               <span key={lbl} style={{ fontSize: 13, fontWeight: 700, color }}>
                 {val}g <span style={{ fontWeight: 400, color: '#888', fontSize: 11 }}>{lbl}</span>
               </span>

@@ -5,7 +5,7 @@
 NutriSnap is a mobile-first progressive web app (PWA) for tracking daily nutrition. Users photograph meals or type descriptions to get instant AI-estimated macros. All logs, goals, and the per-user food library are stored in Supabase so data syncs across devices. The app tracks progress against user-defined goals and offers AI-generated nudges throughout the day.
 
 Live: https://nutrisnap-lovat.vercel.app
-Version: 1.4.1
+Version: 1.4.3
 
 ---
 
@@ -189,8 +189,8 @@ Indexed for case-insensitive uniqueness via `create unique index on food_library
 - Editable meal name
 - Read-only "Components" card listing every item the AI identified (e.g. `rice (200 g) · chicken thigh (130 g) · broccoli (90 g)`) — gives the user transparency into the breakdown that produced the totals
 - Editable amount with unit label — changing it recalculates total macros live
-- Per-unit macros card labelled "Per {refAmount} {refUnit}" (typically "Per 100 g") with 5 editable fields (calories, protein, carbs, fat, fiber); edits here update the user's `food_library` entry on save
-- Read-only totals card: "Total for {amount} {unit}" with calories, protein, carbs, fat, fiber
+- Per-unit macros card labelled "Per {refAmount} {refUnit}" (typically "Per 100 g") with 4 editable fields (calories, protein, carbs, fat); edits here update the user's `food_library` entry on save. Fiber is intentionally not shown or editable on this screen, but the AI's fiber estimate is still scaled by amount and saved to the log (and so still appears in the Log/Reports)
+- Read-only totals card: "Total for {amount} {unit}" with calories, protein, carbs, fat
 - AI model used shown next to the "AI estimate" badge
 - Save to log / Discard
 - **Crash/lock recovery:** while on this screen the analysis (name, amount, per-unit macros, components, model, thumbnail) is mirrored to `localStorage` under `nutrisnap_snap_draft`, including every inline edit. If the page is reloaded or evicted before saving — e.g. iOS Safari discarding the tab when the phone locks — the draft is restored on next mount with a "Restored your last analysis" badge. The draft is cleared on Save to log or Discard, and ignored if older than 24h. The full-resolution photo is not stored (only the small thumbnail), so a lock *during* the analyzing spinner is not recovered — the user re-takes the photo.
