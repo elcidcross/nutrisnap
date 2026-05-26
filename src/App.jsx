@@ -176,7 +176,7 @@ export default function App() {
 
   return (
     <div style={{
-      maxWidth: 430, margin: '0 auto', height: '100dvh', overflow: 'hidden',
+      maxWidth: 430, margin: '0 auto', minHeight: '100dvh',
       background: '#fff', display: 'flex', flexDirection: 'column',
       position: 'relative',
     }}>
@@ -202,7 +202,7 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 'calc(110px + env(safe-area-inset-bottom))' }}>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(110px + env(safe-area-inset-bottom))' }}>
         {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={handleDeleteLog} onEdit={handleEditLog} />}
         {tab === 'snap' && <SnapView logs={logs} foodLibrary={foodLibrary} onSaved={entry => { handleAddLog(entry); setTab('log'); }} onSaveToLibrary={handleSaveToLibrary} onUpdateLibrary={handleUpdateLibrary} />}
         {tab === 'report' && <ReportView logs={logs} goalsHistory={goalsHistory} />}

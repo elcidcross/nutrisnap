@@ -352,28 +352,6 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   // Review screen
   return (
     <div style={s}>
-      {/* Live totals, pinned to the top of the scroll area so they stay visible
-          while the on-screen keyboard covers the amount/macro inputs below. */}
-      <div style={{
-        position: 'sticky', top: 0, zIndex: 5,
-        margin: '-20px -20px 16px', padding: '10px 20px',
-        background: '#e1f5ee', borderBottom: '0.5px solid rgba(29,158,117,.2)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 24, fontWeight: 800, color: COLORS.cal }}>
-            {macros.calories} <span style={{ fontSize: 13, fontWeight: 600 }}>kcal</span>
-          </div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            {[['Protein', macros.protein, COLORS.protein], ['Carbs', macros.carbs, COLORS.carbs], ['Fat', macros.fat, COLORS.fat], ['Fiber', macros.fiber, COLORS.fiber]].map(([lbl, val, color]) => (
-              <span key={lbl} style={{ fontSize: 12, fontWeight: 700, color }}>
-                {val}g <span style={{ fontWeight: 500, color: '#5a7d70', fontSize: 10 }}>{lbl}</span>
-              </span>
-            ))}
-          </div>
-        </div>
-        <div style={{ fontSize: 10, color: '#5a7d70', marginTop: 1, fontWeight: 600 }}>Total for {amount} {amountUnit}</div>
-      </div>
-
       {(imgUrl || imgThumb) && <img src={imgUrl || imgThumb} alt="Food" style={{ width: '100%', borderRadius: 14, marginBottom: 16, maxHeight: 240, objectFit: 'cover' }} />}
 
       {restored && (
@@ -453,6 +431,23 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Calculated totals (read-only) */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>
+          Total for {amount} {amountUnit}
+        </div>
+        <div style={{ background: '#e1f5ee', borderRadius: 12, padding: 14, border: '0.5px solid rgba(29,158,117,.2)' }}>
+          <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.cal, marginBottom: 6 }}>{macros.calories} <span style={{ fontSize: 14, fontWeight: 600 }}>kcal</span></div>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            {[['Protein', macros.protein, COLORS.protein], ['Carbs', macros.carbs, COLORS.carbs], ['Fat', macros.fat, COLORS.fat], ['Fiber', macros.fiber, COLORS.fiber]].map(([lbl, val, color]) => (
+              <span key={lbl} style={{ fontSize: 13, fontWeight: 700, color }}>
+                {val}g <span style={{ fontWeight: 400, color: '#888', fontSize: 11 }}>{lbl}</span>
+              </span>
+            ))}
+          </div>
         </div>
       </div>
 
