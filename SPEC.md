@@ -5,7 +5,7 @@
 NutriSnap is a mobile-first progressive web app (PWA) for tracking daily nutrition. Users photograph meals or type descriptions to get instant AI-estimated macros. All logs, goals, and the per-user food library are stored in Supabase so data syncs across devices. The app tracks progress against user-defined goals and offers AI-generated nudges throughout the day.
 
 Live: https://nutrisnap-lovat.vercel.app
-Version: 1.3.0
+Version: 1.4.0
 
 ---
 
@@ -152,6 +152,7 @@ Indexed for case-insensitive uniqueness via `create unique index on food_library
 |---|---|
 | `nutrisnap_api_key` | User's AI provider API key (per-device) |
 | `nutrisnap_api_provider` | `"anthropic"` \| `"openai"` \| `"gemini"` |
+| `nutrisnap_snap_draft` | In-progress (reviewed-but-unsaved) analysis; see Review screen below |
 
 ---
 
@@ -190,6 +191,7 @@ Indexed for case-insensitive uniqueness via `create unique index on food_library
 - Read-only totals card: "Total for {amount} {unit}" with calories, protein, carbs, fat, fiber
 - AI model used shown next to the "AI estimate" badge
 - Save to log / Discard
+- **Crash/lock recovery:** while on this screen the analysis (name, amount, per-unit macros, components, model, thumbnail) is mirrored to `localStorage` under `nutrisnap_snap_draft`, including every inline edit. If the page is reloaded or evicted before saving — e.g. iOS Safari discarding the tab when the phone locks — the draft is restored on next mount with a "Restored your last analysis" badge. The draft is cleared on Save to log or Discard, and ignored if older than 24h. The full-resolution photo is not stored (only the small thumbnail), so a lock *during* the analyzing spinner is not recovered — the user re-takes the photo.
 
 **Recent meals**
 - Deduped by name, unique meals from the last 3 calendar days (today + previous 2), up to 15

@@ -1,7 +1,30 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { analyzeFood, analyzeFoodText } from '../utils/api';
 
 const COLORS = { cal: '#1d9e75', protein: '#d4537e', carbs: '#378add', fat: '#ba7517', fiber: '#639922' };
+
+// A reviewed-but-unsaved analysis lives only in component state, so it's lost if
+// iOS Safari evicts/reloads the page (e.g. when the phone locks). Persist a small
+// draft of the review screen to localStorage so it can be restored on remount.
+const DRAFT_KEY = 'nutrisnap_snap_draft';
+const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+function saveDraft(obj) {
+  try { localStorage.setItem(DRAFT_KEY, JSON.stringify(obj)); } catch { /* quota / private mode */ }
+}
+function clearDraft() {
+  try { localStorage.removeItem(DRAFT_KEY); } catch { /* ignore */ }
+}
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (d && d.v === 1 && Date.now() - d.savedAt < DRAFT_MAX_AGE_MS) return d;
+  } catch { /* corrupt */ }
+  clearDraft();
+  return null;
+}
 
 function r1(n) { return Math.round(n * 10) / 10; }
 
@@ -33,8 +56,40 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   const [err, setErr] = useState(null);
   const [textInput, setTextInput] = useState('');
   const [modelUsed, setModelUsed] = useState(null);
+  const [restored, setRestored] = useState(false);
 
   const macros = calcMacros(amount, refAmount, refMacros);
+
+  // Restore a previously reviewed analysis after a reload (e.g. iPhone lock).
+  useEffect(() => {
+    const d = loadDraft();
+    if (!d) return;
+    setImgThumb(d.imgThumb || null);
+    setMealName(d.mealName || '');
+    setAmount(d.amount ?? 0);
+    setAmountUnit(d.amountUnit || 'g');
+    setRefAmount(d.refAmount ?? 100);
+    setRefUnit(d.refUnit || 'g');
+    setRefMacros(d.refMacros || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+    setComponents(Array.isArray(d.components) ? d.components : []);
+    setModelUsed(d.modelUsed || null);
+    setLibraryDirty(!!d.libraryDirty);
+    setRestored(true);
+    setState('review');
+  }, []);
+
+  // Keep the draft in sync while reviewing; clear it the moment we leave review
+  // (covers both confirm and discard, which reset state to 'idle').
+  useEffect(() => {
+    if (state === 'review') {
+      saveDraft({
+        v: 1, savedAt: Date.now(), imgThumb, mealName, amount, amountUnit,
+        refAmount, refUnit, refMacros, components, modelUsed, libraryDirty,
+      });
+    } else {
+      clearDraft();
+    }
+  }, [state, imgThumb, mealName, amount, amountUnit, refAmount, refUnit, refMacros, components, modelUsed, libraryDirty]);
 
   const makeThumbnail = (objectUrl) => new Promise(resolve => {
     const img = new Image();
@@ -103,6 +158,7 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
       setComponents(Array.isArray(a.components) ? a.components : []);
       setModelUsed(a._modelUsed || null);
       setLibraryDirty(false);
+      setRestored(false);
       onSaveToLibrary({ name, refAmount: refAmt, refUnit: unit, ...rm });
       setState('review');
       return true;
@@ -137,6 +193,9 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
       ...macros,
     });
     if (libraryDirty) onUpdateLibrary(mealName, refMacros);
+    // onSaved switches tabs, which unmounts this component before the persist
+    // effect can run — so clear the saved draft explicitly here.
+    clearDraft();
     reset();
   };
 
@@ -146,6 +205,7 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
     setRefMacros({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
     setComponents([]);
     setLibraryDirty(false); setErr(null); setTextInput(''); setModelUsed(null);
+    setRestored(false);
   };
 
   // Deduplicated recent meals — latest entry per unique name from the last
@@ -292,7 +352,13 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   // Review screen
   return (
     <div style={s}>
-      {imgUrl && <img src={imgUrl} alt="Food" style={{ width: '100%', borderRadius: 14, marginBottom: 16, maxHeight: 240, objectFit: 'cover' }} />}
+      {(imgUrl || imgThumb) && <img src={imgUrl || imgThumb} alt="Food" style={{ width: '100%', borderRadius: 14, marginBottom: 16, maxHeight: 240, objectFit: 'cover' }} />}
+
+      {restored && (
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#fff4e1', color: '#9a6a12', fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 6, marginBottom: 12 }}>
+          <i className="ti ti-restore" style={{ fontSize: 12 }} />Restored your last analysis
+        </div>
+      )}
 
       {/* Badges */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
