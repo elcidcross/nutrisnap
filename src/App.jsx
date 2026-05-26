@@ -5,7 +5,7 @@ import SnapView from './components/SnapView';
 import ReportView from './components/ReportView';
 import SettingsView from './components/SettingsView';
 import { supabase } from './utils/supabase';
-import { getLogs, addLog, updateLog, deleteLog, bulkAddLogs, getGoals, saveGoals, getGoalsHistory, addGoalsHistoryEntry, getNotifSettings, saveNotifSettings, getFoodLibrary, saveFoodToLibrary, updateFoodInLibrary, DEFAULT_GOALS, DEFAULT_NOTIF } from './utils/db';
+import { getLogs, getLogImages, addLog, updateLog, deleteLog, bulkAddLogs, getGoals, saveGoals, getGoalsHistory, addGoalsHistoryEntry, getNotifSettings, saveNotifSettings, getFoodLibrary, saveFoodToLibrary, updateFoodInLibrary, DEFAULT_GOALS, DEFAULT_NOTIF } from './utils/db';
 import { todayStr } from './utils/date';
 
 export default function App() {
@@ -50,6 +50,14 @@ export default function App() {
       setGoalsHistory(gh.length ? gh : [{ timestamp: 0, ...g }]);
       setNotif(n);
       setFoodLibrary(fl);
+      // Backfill thumbnails off the critical path: the UI is already usable
+      // with imageless logs; merge images in by id once they arrive. New logs
+      // added meanwhile already carry their own thumbnail, so only overwrite
+      // ids present in the fetched set.
+      getLogImages(user.id).then(imgs => {
+        const map = new Map(imgs.map(r => [r.id, r.image_url || null]));
+        setLogs(prev => prev.map(x => map.has(x.id) ? { ...x, imageUrl: map.get(x.id) } : x));
+      }).catch(console.error);
     }).catch(console.error).finally(() => setDataLoading(false));
   }, [user]);
 

@@ -42,14 +42,29 @@ function logToRow(userId, entry) {
   };
 }
 
+// Initial load excludes image_url — the base64 thumbnails are the entire
+// variable cost of this query (it grows ~10KB per logged meal), so we keep
+// them off the app's critical path and backfill them via getLogImages.
+const LOG_COLS = 'id,timestamp,name,calories,protein,carbs,fat,fiber,model,amount,unit,ref_amount,ref_unit';
+
 export async function getLogs(userId) {
   const { data, error } = await supabase
     .from('logs')
-    .select('*')
+    .select(LOG_COLS)
     .eq('user_id', userId)
     .order('timestamp', { ascending: false });
   if (error) throw error;
   return (data || []).map(rowToLog);
+}
+
+// Thumbnails only, fetched after the UI has rendered and merged in by id.
+export async function getLogImages(userId) {
+  const { data, error } = await supabase
+    .from('logs')
+    .select('id,image_url')
+    .eq('user_id', userId);
+  if (error) throw error;
+  return data || [];
 }
 
 export async function addLog(userId, entry) {

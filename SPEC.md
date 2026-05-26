@@ -5,7 +5,7 @@
 NutriSnap is a mobile-first progressive web app (PWA) for tracking daily nutrition. Users photograph meals or type descriptions to get instant AI-estimated macros. All logs, goals, and the per-user food library are stored in Supabase so data syncs across devices. The app tracks progress against user-defined goals and offers AI-generated nudges throughout the day.
 
 Live: https://nutrisnap-lovat.vercel.app
-Version: 1.4.0
+Version: 1.4.1
 
 ---
 
@@ -81,6 +81,8 @@ If the user edits the per-100g macros on the review screen, the library row for 
 ## Data Model
 
 All data lives in Supabase Postgres. Each table has RLS enabled with a `auth.uid() = user_id` policy. Local state in React mirrors the DB for instant updates; mutations are optimistic with background writes (`.catch(console.error)`).
+
+**Initial load ("Loading your data").** On login the app runs five queries in parallel (`getLogs`, `getGoals`, `getGoalsHistory`, `getNotifSettings`, `getFoodLibrary`), so the wait is the slowest single query. The four small ones are ~one network round-trip each; `getLogs` is the only one whose payload grows with usage, because `image_url` holds an inline base64 thumbnail (~10 KB/meal). To keep load time flat as history grows, `getLogs` selects every column **except** `image_url`; thumbnails are fetched separately by `getLogImages` after the UI has rendered and merged into `logs` state by id. Rows render with a placeholder food icon until their thumbnail backfills (typically within a few hundred ms). Logs added during the session already carry their own thumbnail, so the merge only overwrites ids present in the fetched set.
 
 ### `logs`
 
