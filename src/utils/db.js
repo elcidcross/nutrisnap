@@ -81,6 +81,10 @@ export async function updateLog(userId, id, updates) {
   if (updates.fat !== undefined) row.fat = updates.fat;
   if (updates.fiber !== undefined) row.fiber = updates.fiber;
   if (updates.amount !== undefined) row.amount = updates.amount;
+  if (updates.unit !== undefined) row.unit = updates.unit;
+  if (updates.model !== undefined) row.model = updates.model;
+  if (updates.refAmount !== undefined) row.ref_amount = updates.refAmount;
+  if (updates.refUnit !== undefined) row.ref_unit = updates.refUnit;
   if (updates.timestamp !== undefined) row.timestamp = updates.timestamp;
   const { error } = await supabase.from('logs').update(row).eq('id', id).eq('user_id', userId);
   if (error) throw error;

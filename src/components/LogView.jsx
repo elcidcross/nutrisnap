@@ -2,10 +2,16 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Ring from './Ring';
 import ProgressBar from './ProgressBar';
 import NudgeCard from './NudgeCard';
-import { getNudge } from '../utils/api';
+import { getNudge, analyzeFood } from '../utils/api';
 import { todayStr, fmtTime, fmtDate } from '../utils/date';
 
 const COLORS = { cal: '#1d9e75', protein: '#d4537e', carbs: '#378add', fat: '#ba7517' };
+
+// An entry saved from a photo without running the AI (e.g. analysis failed) has
+// an image but no macros. These can be analyzed later from the log.
+function isPendingAnalysis(entry) {
+  return !!entry.imageUrl && !entry.calories && !entry.protein && !entry.carbs && !entry.fat;
+}
 
 export default function LogView({ logs, goals, onDelete, onEdit }) {
   const todayLogs = logs.filter(l => new Date(l.timestamp).toDateString() === todayStr());
@@ -47,6 +53,7 @@ export default function LogView({ logs, goals, onDelete, onEdit }) {
 
   return (
     <div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
       {/* Rings */}
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px 20px 10px', gap: 20 }}>
         <Ring size={88} value={totals.calories} max={goals.calories} color={COLORS.cal} label="kcal" sub="calories" />
@@ -107,6 +114,9 @@ function LogEntry({ entry, onDelete, onEdit }) {
   const [draft, setDraft] = useState({});
   const [zoomed, setZoomed] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeErr, setAnalyzeErr] = useState(null);
+  const pending = isPendingAnalysis(entry);
   // Fixed anchor for proportional rescaling: macros at a known amount.
   // Anchoring on this (rather than the previous amount) means clearing the
   // amount field to empty doesn't lose the reference, so retyping recomputes.
@@ -165,6 +175,40 @@ function LogEntry({ entry, onDelete, onEdit }) {
       };
       return nd;
     });
+  };
+
+  // Re-run analysis on a saved photo (for entries saved without analysis).
+  // The stored thumbnail is a data URL, so we recover base64 + mime from it.
+  const reanalyze = async () => {
+    if (!localStorage.getItem('nutrisnap_api_key')) {
+      setAnalyzeErr('No API key set. Add one in Goals & Settings.');
+      return;
+    }
+    const m = /^data:(image\/[\w.+-]+);base64,(.*)$/s.exec(entry.imageUrl || '');
+    if (!m) { setAnalyzeErr('No photo to analyze.'); return; }
+    setAnalyzing(true);
+    setAnalyzeErr(null);
+    try {
+      const a = await analyzeFood(m[2], m[1]);
+      const unit = a.unit || 'g';
+      onEdit(entry.id, {
+        name: a.name || 'Meal',
+        amount: a.amount || 0,
+        unit,
+        refAmount: unit === 'g' ? 100 : 1,
+        refUnit: unit,
+        calories: a.calories || 0,
+        protein: a.protein || 0,
+        carbs: a.carbs || 0,
+        fat: a.fat || 0,
+        fiber: a.fiber || 0,
+        model: a._modelUsed || null,
+      });
+    } catch (e) {
+      setAnalyzeErr(e.message || 'Could not analyze. Please try again.');
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const save = () => {
@@ -252,20 +296,39 @@ function LogEntry({ entry, onDelete, onEdit }) {
         <div style={{ fontSize: 11, color: '#999', marginBottom: 6 }}>
           {entry.amount && entry.unit ? <>{entry.amount} {entry.unit} · </> : null}{fmtTime(entry.timestamp)}{entry.model && <> · <span style={{ fontFamily: 'monospace' }}>{entry.model}</span></>}
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {[['#d4537e','P',entry.protein,'g'],['#378add','C',entry.carbs,'g'],['#ba7517','F',entry.fat,'g']].map(([c,l,v,u]) => (
-            <span key={l} style={{ fontSize: 11, color: '#888', display: 'flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: c, display: 'inline-block' }} />
-              {l} {v}{u}
-            </span>
-          ))}
-        </div>
+        {pending ? (
+          <>
+            {analyzing ? (
+              <span style={{ fontSize: 12, color: '#888', display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ width: 13, height: 13, border: '2px solid #e0f5ed', borderTopColor: '#1d9e75', borderRadius: '50%', animation: 'spin .8s linear infinite', display: 'inline-block' }} />
+                Analyzing…
+              </span>
+            ) : (
+              <button onClick={reanalyze}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: '#fff', background: '#1d9e75', border: 'none', borderRadius: 8, padding: '5px 10px', cursor: 'pointer' }}>
+                <i className="ti ti-sparkles" style={{ fontSize: 13 }} />Analyze photo
+              </button>
+            )}
+            {analyzeErr && <p style={{ color: '#e24b4a', fontSize: 11, marginTop: 6, lineHeight: 1.4 }}>{analyzeErr}</p>}
+          </>
+        ) : (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {[['#d4537e','P',entry.protein,'g'],['#378add','C',entry.carbs,'g'],['#ba7517','F',entry.fat,'g']].map(([c,l,v,u]) => (
+              <span key={l} style={{ fontSize: 11, color: '#888', display: 'flex', alignItems: 'center', gap: 3 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: c, display: 'inline-block' }} />
+                {l} {v}{u}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
-      <span style={{ fontSize: 14, fontWeight: 700, color: '#888', marginLeft: 'auto', flexShrink: 0 }}>{entry.calories} kcal</span>
-      <button onClick={startEdit} aria-label="Edit entry"
-        style={{ background: 'none', border: 'none', color: '#ccc', fontSize: 17, padding: 4, flexShrink: 0, cursor: 'pointer' }}>
-        <i className="ti ti-pencil" />
-      </button>
+      {!pending && <span style={{ fontSize: 14, fontWeight: 700, color: '#888', marginLeft: 'auto', flexShrink: 0 }}>{entry.calories} kcal</span>}
+      {!pending && (
+        <button onClick={startEdit} aria-label="Edit entry"
+          style={{ background: 'none', border: 'none', color: '#ccc', fontSize: 17, padding: 4, flexShrink: 0, cursor: 'pointer' }}>
+          <i className="ti ti-pencil" />
+        </button>
+      )}
       <button onClick={() => setConfirmingDelete(true)} aria-label="Delete entry"
         style={{ background: 'none', border: 'none', color: '#ccc', fontSize: 17, padding: 4, flexShrink: 0, cursor: 'pointer' }}>
         <i className="ti ti-trash" />

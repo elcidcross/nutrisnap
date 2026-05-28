@@ -199,6 +199,23 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
     reset();
   };
 
+  // Save the photo to the log now, without running analysis. Useful when the
+  // AI call fails (e.g. spending cap reached) — the meal is preserved with a
+  // zero-macro placeholder so it can be analyzed later from the log.
+  const saveWithoutAnalysis = () => {
+    onSaved({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      timestamp: Date.now(),
+      name: 'Unanalyzed meal',
+      imageUrl: imgThumb || null,
+      model: null,
+      amount: null, unit: null, refAmount: null, refUnit: null,
+      calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0,
+    });
+    clearDraft();
+    reset();
+  };
+
   const reset = () => {
     setState('idle'); setImgUrl(null); setImgThumb(null); setImgB64(null);
     setMealName(''); setAmount(0); setAmountUnit('g'); setRefAmount(100); setRefUnit('g');
@@ -335,6 +352,9 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
       {err && <p style={{ color: '#e24b4a', fontSize: 13, textAlign: 'center', marginBottom: 12 }}>{err}</p>}
       <Btn primary onClick={analyze}><i className="ti ti-sparkles" />Analyze this meal</Btn>
       <Btn onClick={reset} style={{ marginTop: 10 }}>Choose a different photo</Btn>
+      <Btn onClick={saveWithoutAnalysis} style={{ marginTop: 10, background: 'transparent', color: '#888', fontWeight: 600 }}>
+        <i className="ti ti-clock" />Save photo, analyze later
+      </Btn>
     </div>
   );
 
