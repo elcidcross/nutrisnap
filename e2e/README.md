@@ -31,5 +31,6 @@ sign-up so the AI proxy has something to call. Tests fail fast if it's missing.
   cache hit).
 - `edit_log.test.js` — Edit a logged entry: rename, change amount (verify macros
   rescale proportionally), change timestamp; reload and verify persistence.
-- `report_metrics.test.js` — Click the protein / carbs / fat tiles on the Report
-  tab and verify the chart switches metric.
+- `report_metrics.test.js` — Verify the Report tab renders one labelled chart per
+  metric (calories/protein/carbs/fat) and that the Day/Week/Month period tabs and
+  previous-period navigation update the period label.

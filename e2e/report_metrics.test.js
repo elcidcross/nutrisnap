@@ -1,4 +1,4 @@
-// Click each macro tile on the Report tab and verify the chart switches metric.
+// Report tab: one labelled chart per metric, plus Day/Week/Month period switching.
 const { newBrowser, signUpFreshUser, logSalmonByText, assert } = require('./_helpers');
 
 (async () => {
@@ -12,21 +12,35 @@ const { newBrowser, signUpFreshUser, logSalmonByText, assert } = require('./_hel
     await page.click('button:has-text("Report")');
     await page.waitForTimeout(1200);
 
-    const initialLabel = await page.$eval('canvas#reportChart', el => el.getAttribute('aria-label'));
-    assert(/calories/i.test(initialLabel), `Default chart shows Calories (label: "${initialLabel}")`);
-
-    // Tiles are buttons with aria-pressed; the second one is protein
-    const tiles = await page.$$('button[aria-pressed]');
-    assert(tiles.length === 4, `4 macro tiles rendered (got ${tiles.length})`);
-
-    for (const [idx, metric] of [[1, 'protein'], [2, 'carbs'], [3, 'fat']]) {
-      await tiles[idx].click();
-      await page.waitForTimeout(400);
-      const lbl = await page.$eval('canvas#reportChart', el => el.getAttribute('aria-label'));
-      assert(lbl.toLowerCase().includes(metric), `Chart switched to ${metric} (label: "${lbl}")`);
-      const pressed = await page.$$eval('button[aria-pressed="true"]', els => els.length);
-      assert(pressed === 1, `Exactly one tile is active after clicking ${metric} (got ${pressed})`);
+    // One chart per metric, each a labelled canvas.
+    const labels = await page.$$eval('canvas[role="img"]', els =>
+      els.map(e => (e.getAttribute('aria-label') || '').toLowerCase()));
+    assert(labels.length === 4, `4 metric charts rendered (got ${labels.length})`);
+    for (const metric of ['calories', 'protein', 'carbs', 'fat']) {
+      assert(labels.some(l => l.includes(metric)), `Chart present for ${metric}`);
     }
+
+    const label = async () => (await page.evaluate(() => document.body.innerText)).toLowerCase();
+
+    // Default period is Day → "Today".
+    assert((await label()).includes('today'), 'Default period label is "Today"');
+
+    await page.click('button:text-is("Week")');
+    await page.waitForTimeout(400);
+    assert((await label()).includes('this week'), 'Switching to Week shows "This week"');
+
+    await page.click('button:text-is("Month")');
+    await page.waitForTimeout(400);
+    assert((await label()).includes('this month'), 'Switching to Month shows "This month"');
+
+    await page.click('button:text-is("Day")');
+    await page.waitForTimeout(400);
+    assert((await label()).includes('today'), 'Switching back to Day shows "Today"');
+
+    // Period navigation: previous from Today → Yesterday.
+    await page.click('button[aria-label="Previous period"]');
+    await page.waitForTimeout(400);
+    assert((await label()).includes('yesterday'), 'Previous period shows "Yesterday"');
   } finally {
     await browser.close();
   }
