@@ -1,6 +1,6 @@
 {
   "name": "nutrisnap",
-  "version": "1.4.4",
+  "version": "1.4.5",
   "private": true,
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
