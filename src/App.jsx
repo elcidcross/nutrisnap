@@ -112,6 +112,24 @@ export default function App() {
     updateLog(user.id, id, updates).catch(console.error);
   };
 
+  const handleRelog = (entry) => {
+    handleAddLog({
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2),
+      timestamp: Date.now(),
+      name: entry.name,
+      imageUrl: entry.imageUrl,
+      calories: entry.calories,
+      protein: entry.protein,
+      carbs: entry.carbs,
+      fat: entry.fat,
+      fiber: entry.fiber || 0,
+      amount: entry.amount ?? null,
+      unit: entry.unit ?? null,
+      refAmount: entry.refAmount ?? null,
+      refUnit: entry.refUnit ?? null,
+    });
+  };
+
   const handleGoalSave = (field, val) => {
     const newGoals = { ...goals, [field]: val };
     setGoals(newGoals);
@@ -203,8 +221,8 @@ export default function App() {
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 'calc(110px + env(safe-area-inset-bottom))' }}>
-        {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={handleDeleteLog} onEdit={handleEditLog} />}
-        {tab === 'snap' && <SnapView logs={logs} foodLibrary={foodLibrary} onSaved={entry => { handleAddLog(entry); setTab('log'); }} onSaveToLibrary={handleSaveToLibrary} onUpdateLibrary={handleUpdateLibrary} />}
+        {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={handleDeleteLog} onEdit={handleEditLog} onRelog={handleRelog} />}
+        {tab === 'snap' && <SnapView foodLibrary={foodLibrary} onSaved={entry => { handleAddLog(entry); setTab('log'); }} onSaveToLibrary={handleSaveToLibrary} onUpdateLibrary={handleUpdateLibrary} />}
         {tab === 'report' && <ReportView logs={logs} goalsHistory={goalsHistory} />}
         {tab === 'settings' && (
           <SettingsView

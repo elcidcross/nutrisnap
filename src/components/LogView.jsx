@@ -13,7 +13,7 @@ function isPendingAnalysis(entry) {
   return !!entry.imageUrl && !entry.calories && !entry.protein && !entry.carbs && !entry.fat;
 }
 
-export default function LogView({ logs, goals, onDelete, onEdit }) {
+export default function LogView({ logs, goals, onDelete, onEdit, onRelog }) {
   const todayLogs = logs.filter(l => new Date(l.timestamp).toDateString() === todayStr());
   const totals = todayLogs.reduce((a, l) => ({
     calories: a.calories + (l.calories || 0),
@@ -93,7 +93,7 @@ export default function LogView({ logs, goals, onDelete, onEdit }) {
               <div style={{ padding: '10px 16px 6px', fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '.5px', background: '#f5f5f0' }}>
                 {day === todayStr() ? 'Today' : fmtDate(entries[0].timestamp)}
               </div>
-              {entries.map(entry => <LogEntry key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} />)}
+              {entries.map(entry => <LogEntry key={entry.id} entry={entry} onDelete={onDelete} onEdit={onEdit} onRelog={onRelog} />)}
             </div>
           ))
       }
@@ -109,7 +109,7 @@ function toLocalInput(ts) {
 
 function r1(n) { return Math.round(n * 10) / 10; }
 
-function LogEntry({ entry, onDelete, onEdit }) {
+function LogEntry({ entry, onDelete, onEdit, onRelog }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
   const [zoomed, setZoomed] = useState(false);
@@ -323,6 +323,12 @@ function LogEntry({ entry, onDelete, onEdit }) {
         )}
       </div>
       {!pending && <span style={{ fontSize: 14, fontWeight: 700, color: '#888', marginLeft: 'auto', flexShrink: 0 }}>{entry.calories} kcal</span>}
+      {!pending && (
+        <button onClick={() => onRelog(entry)} aria-label="Log this again"
+          style={{ background: 'none', border: 'none', color: '#1d9e75', fontSize: 17, padding: 4, flexShrink: 0, cursor: 'pointer' }}>
+          <i className="ti ti-plus" />
+        </button>
+      )}
       {!pending && (
         <button onClick={startEdit} aria-label="Edit entry"
           style={{ background: 'none', border: 'none', color: '#ccc', fontSize: 17, padding: 4, flexShrink: 0, cursor: 'pointer' }}>
