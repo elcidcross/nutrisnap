@@ -75,8 +75,10 @@ function buildSeries(metricKey, period, offset, logs, goalsHistory) {
   if (period === 'day') {
     const hrs = Array.from({ length: 24 }, (_, i) => i);
     const dayGoal = goalsAtDate(w.start + 43200000, goalsHistory)[metricKey];
+    // 25 labels (0:00 … 24:00) mark hour boundaries; only 24 buckets carry data,
+    // so the trailing 24:00 slot stays empty. The x-axis shows every 4th tick.
     return {
-      labels: hrs.map(h => String(h).padStart(2, '0') + ':00'),
+      labels: Array.from({ length: 25 }, (_, h) => h + ':00'),
       data: hrs.map(h => sumAt(w.start + h * 3600000, w.start + (h + 1) * 3600000)),
       goalData: hrs.map(() => dayGoal),
     };
@@ -122,7 +124,7 @@ function MetricChart({ metricKey, period, offset, logs, goalsHistory, total, tar
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: v => `${v.dataset.label}: ${fmtVal(v.raw)} ${m.unit}` } } },
         scales: {
-          x: { grid: { display: false }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 }, maxTicksLimit: period === 'month' ? 10 : period === 'day' ? 12 : undefined } },
+          x: { grid: { display: false }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 }, autoSkip: period !== 'day', maxTicksLimit: period === 'month' ? 10 : undefined, callback: period === 'day' ? function (v, i) { return i % 4 === 0 ? this.getLabelForValue(v) : ''; } : undefined } },
           y: { grid: { color: isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)' }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 }, callback: v => v > 0 ? v : '' } },
         },
       },
