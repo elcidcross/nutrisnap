@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { analyzeFood, analyzeFoodText } from '../utils/api';
 
 const COLORS = { cal: '#1d9e75', protein: '#d4537e', carbs: '#378add', fat: '#ba7517', fiber: '#639922' };
@@ -56,6 +56,80 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   const [textInput, setTextInput] = useState('');
   const [modelUsed, setModelUsed] = useState(null);
   const [restored, setRestored] = useState(false);
+  const [highlightIdx, setHighlightIdx] = useState(-1);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+
+  const suggestions = useMemo(() => {
+    const q = textInput.trim().toLowerCase();
+    if (!q) return [];
+    const starts = [], contains = [];
+    for (const f of foodLibrary) {
+      const n = (f.name || '').toLowerCase();
+      if (n.startsWith(q)) starts.push(f);
+      else if (n.includes(q)) contains.push(f);
+    }
+    const byName = (a, b) => a.name.localeCompare(b.name);
+    return [...starts.sort(byName), ...contains.sort(byName)].slice(0, 8);
+  }, [textInput, foodLibrary]);
+  const showDropdown = dropdownOpen && suggestions.length > 0;
+
+  const selectSuggestion = (food) => {
+    const ra = food.refAmount || 100;
+    const ru = food.refUnit || 'g';
+    setMealName(food.name);
+    setRefAmount(ra);
+    setRefUnit(ru);
+    setRefMacros({
+      calories: food.calories || 0,
+      protein: food.protein || 0,
+      carbs: food.carbs || 0,
+      fat: food.fat || 0,
+      fiber: food.fiber || 0,
+    });
+    setAmount(ra);
+    setAmountUnit(ru);
+    setComponents([]);
+    setModelUsed(null);
+    setLibraryDirty(false);
+    setRestored(false);
+    setErr(null);
+    setDropdownOpen(false);
+    setHighlightIdx(-1);
+    setTextInput('');
+    setState('review');
+  };
+
+  const handleInputKeyDown = (e) => {
+    if (showDropdown) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setHighlightIdx(i => (i + 1) % suggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setHighlightIdx(i => (i <= 0 ? suggestions.length - 1 : i - 1));
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setDropdownOpen(false);
+        setHighlightIdx(-1);
+        return;
+      }
+      if (e.key === 'Tab') {
+        setDropdownOpen(false);
+        setHighlightIdx(-1);
+        return;
+      }
+      if (e.key === 'Enter' && highlightIdx >= 0 && highlightIdx < suggestions.length) {
+        e.preventDefault();
+        selectSuggestion(suggestions[highlightIdx]);
+        return;
+      }
+    }
+    if (e.key === 'Enter') analyzeText();
+  };
 
   const macros = calcMacros(amount, refAmount, refMacros);
 
@@ -246,19 +320,67 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
       </div>
 
       {/* Text input */}
-      <div style={{ width: '100%', display: 'flex', gap: 8, marginBottom: 16 }}>
-        <input
-          type="text"
-          value={textInput}
-          onChange={e => { setTextInput(e.target.value); setErr(null); }}
-          onKeyDown={e => e.key === 'Enter' && analyzeText()}
-          placeholder="e.g. large pepperoni pizza slice"
-          style={{ flex: 1, padding: '13px 14px', fontSize: 14, borderRadius: 12, border: '1.5px solid rgba(0,0,0,.15)', background: '#fafaf8', outline: 'none', color: 'inherit' }}
-        />
-        <button onClick={analyzeText} disabled={!textInput.trim()}
-          style={{ padding: '0 16px', borderRadius: 12, border: 'none', background: textInput.trim() ? '#1d9e75' : '#ccc', color: '#fff', fontSize: 20, cursor: textInput.trim() ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center' }}>
-          <i className="ti ti-arrow-right" />
-        </button>
+      <div style={{ width: '100%', position: 'relative', marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            type="text"
+            value={textInput}
+            onChange={e => { setTextInput(e.target.value); setErr(null); setHighlightIdx(-1); setDropdownOpen(true); }}
+            onKeyDown={handleInputKeyDown}
+            onFocus={() => setDropdownOpen(true)}
+            onBlur={() => setDropdownOpen(false)}
+            placeholder="e.g. large pepperoni pizza slice"
+            style={{ flex: 1, padding: '13px 14px', fontSize: 14, borderRadius: 12, border: '1.5px solid rgba(0,0,0,.15)', background: '#fafaf8', outline: 'none', color: 'inherit' }}
+          />
+          <button onClick={analyzeText} disabled={!textInput.trim()}
+            style={{ padding: '0 16px', borderRadius: 12, border: 'none', background: textInput.trim() ? '#1d9e75' : '#ccc', color: '#fff', fontSize: 20, cursor: textInput.trim() ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center' }}>
+            <i className="ti ti-arrow-right" />
+          </button>
+        </div>
+        {showDropdown && (
+          <ul role="listbox" style={{
+            position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
+            margin: 0, padding: 4, listStyle: 'none',
+            background: '#fff', border: '1.5px solid rgba(0,0,0,.15)', borderRadius: 12,
+            boxShadow: '0 4px 16px rgba(0,0,0,.08)', maxHeight: 280, overflowY: 'auto',
+            zIndex: 10, textAlign: 'left',
+          }}>
+            {suggestions.map((f, i) => {
+              const q = textInput.trim();
+              const lower = f.name.toLowerCase();
+              const idx = q ? lower.indexOf(q.toLowerCase()) : -1;
+              const highlighted = i === highlightIdx;
+              return (
+                <li
+                  key={f.name}
+                  role="option"
+                  aria-selected={highlighted}
+                  onMouseDown={e => { e.preventDefault(); selectSuggestion(f); }}
+                  onMouseEnter={() => setHighlightIdx(i)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 10, padding: '10px 12px', borderRadius: 8,
+                    background: highlighted ? '#f3faf6' : 'transparent',
+                    cursor: 'pointer', fontSize: 13,
+                  }}
+                >
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {idx < 0 ? f.name : (
+                      <>
+                        {f.name.slice(0, idx)}
+                        <strong>{f.name.slice(idx, idx + q.length)}</strong>
+                        {f.name.slice(idx + q.length)}
+                      </>
+                    )}
+                  </span>
+                  <span style={{ color: '#888', fontSize: 12, flexShrink: 0 }}>
+                    {Math.round(f.calories || 0)} cal / {f.refAmount}{f.refUnit}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
 
       {err && <p style={{ color: '#e24b4a', fontSize: 13, textAlign: 'center', marginBottom: 12, width: '100%' }}>{err}</p>}
