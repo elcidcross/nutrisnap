@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# Run the JS toolchain (node, npm, react-scripts, playwright, vercel dev) inside
+# a long-lived Podman container. Editor, git, gh, and vercel CLI stay on the host.
+#
+# Usage:
+#   scripts/dev build         build the image
+#   scripts/dev up            ensure the container is running (idempotent)
+#   scripts/dev down          stop+remove the container
+#   scripts/dev shell         open a bash shell inside the container
+#   scripts/dev <cmd> [args]  exec a command inside the container
+#
+# First time: `scripts/dev build && scripts/dev npm install`.
+
+set -euo pipefail
+
+IMAGE=nutrisnap-dev
+CONTAINER=nutrisnap-dev
+VOLUME=nutrisnap-node-modules
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+cmd_build() {
+  podman build -t "$IMAGE" -f "$REPO_ROOT/Containerfile" "$REPO_ROOT"
+}
+
+cmd_down() {
+  podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
+}
+
+container_running() {
+  [ "$(podman inspect -f '{{.State.Status}}' "$CONTAINER" 2>/dev/null || echo missing)" = "running" ]
+}
+
+cmd_up() {
+  if ! podman image exists "$IMAGE"; then
+    cmd_build
+  fi
+  if container_running; then
+    return
+  fi
+  podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
+
+  local env_args=()
+  [ -f "$REPO_ROOT/.env.local" ]      && env_args+=(--env-file "$REPO_ROOT/.env.local")
+  [ -f "$REPO_ROOT/.env.e2e.local" ]  && env_args+=(--env-file "$REPO_ROOT/.env.e2e.local")
+
+  podman run -d \
+    --name "$CONTAINER" \
+    --userns=keep-id \
+    -v "$REPO_ROOT:/workspace:Z" \
+    -v "$VOLUME:/workspace/node_modules" \
+    -p 3000:3000 \
+    "${env_args[@]}" \
+    -w /workspace \
+    "$IMAGE" \
+    sleep infinity >/dev/null
+}
+
+# Per-call env forwarding. Anything set on the host shell at exec time (e.g.
+# GEMINI_API_KEY for e2e, BASE_URL to point at the local dev server) is forwarded
+# into the exec'd command. Done at exec time, not container start, so changing a
+# host-side value doesn't require `scripts/dev down`.
+exec_env_args() {
+  local args=()
+  for var in GEMINI_API_KEY BASE_URL ANTHROPIC_API_KEY OPENAI_API_KEY; do
+    [ -n "${!var:-}" ] && args+=(-e "$var=${!var}")
+  done
+  printf '%s\n' "${args[@]}"
+}
+
+cmd_exec() {
+  cmd_up
+  local env_args=()
+  while IFS= read -r line; do
+    [ -n "$line" ] && env_args+=("$line")
+  done < <(exec_env_args)
+  if [ -t 0 ] && [ -t 1 ]; then
+    podman exec -it "${env_args[@]}" "$CONTAINER" "$@"
+  else
+    podman exec -i "${env_args[@]}" "$CONTAINER" "$@"
+  fi
+}
+
+case "${1:-shell}" in
+  build) shift; cmd_build "$@" ;;
+  down)  shift; cmd_down "$@" ;;
+  up)    shift; cmd_up "$@" ;;
+  shell) shift; cmd_exec bash ;;
+  "")    cmd_exec bash ;;
+  *)     cmd_exec "$@" ;;
+esac

@@ -25,8 +25,7 @@ Type a food name or snap a photo. **Phase 1** identifies the food, amount, and a
 
 ## Prerequisites
 
-- **Node.js 18+** — https://nodejs.org
-- **npm** (comes with Node)
+- **[Podman](https://podman.io/docs/installation)** — all local dev runs in a container; the host only needs Podman.
 - An API key from one of [Anthropic](https://console.anthropic.com/settings/keys), [OpenAI](https://platform.openai.com/api-keys), or [Google Gemini](https://aistudio.google.com/apikey). The app defaults to Gemini.
 
 ---
@@ -36,8 +35,11 @@ Type a food name or snap a photo. **Phase 1** identifies the food, amount, and a
 ```bash
 # Clone or unzip this project, then:
 cd nutrisnap
-npm install
+scripts/dev build            # build the dev container (one-time, ~3 min)
+scripts/dev npm install      # install JS deps into a named volume
 ```
+
+`scripts/dev <cmd>` runs `<cmd>` inside the container (Node 20, Chromium for Playwright, all preinstalled). With no arguments it drops you into a bash shell.
 
 ---
 
@@ -54,17 +56,19 @@ For a deployment-wide fallback (so users who haven't set their own key still wor
 ## 3 — Run locally (any browser)
 
 ```bash
-npm start
+scripts/dev npm start
 ```
 
 Opens at **http://localhost:3000**. Works immediately as a web app on desktop and mobile browsers on your local network (`http://YOUR_IP:3000`).
+
+To exercise the `/api/claude` serverless proxy locally (sign-in, meal analysis), use `vercel dev` instead — see SPEC.md §Build & Deploy for the full command.
 
 ---
 
 ## 4 — Build for production / hosting
 
 ```bash
-npm run build
+scripts/dev npm run build
 ```
 
 Outputs a `build/` folder. Deploy it to any static host.

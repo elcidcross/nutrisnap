@@ -2,6 +2,9 @@
   "name": "nutrisnap",
   "version": "1.4.6",
   "private": true,
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.106.1",
     "chart.js": "^4.4.1",
@@ -22,6 +25,9 @@
     "workbox-routing": "^7.0.0",
     "workbox-strategies": "^7.0.0",
     "workbox-streams": "^7.0.0"
+  },
+  "devDependencies": {
+    "playwright": "1.49.1"
   },
   "scripts": {
     "start": "react-scripts start",

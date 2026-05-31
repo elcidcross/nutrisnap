@@ -7,22 +7,24 @@ throwaway account, and runs against `BASE_URL` (defaults to the production URL).
 ## Setup
 
 ```bash
-npm install --no-save playwright
-npx playwright install chromium
+scripts/dev build           # one-time — Playwright + Chromium are baked into the image
+scripts/dev npm install     # one-time — installs playwright into the named-volume node_modules
 ```
 
 ## Run
 
 ```bash
-GEMINI_API_KEY=<key> npm run e2e
+GEMINI_API_KEY=<key> scripts/dev npm run e2e
 # or run one file:
-GEMINI_API_KEY=<key> node e2e/snap_text.test.js
-# against a different deployment:
-BASE_URL=http://localhost:3000 GEMINI_API_KEY=<key> npm run e2e
+GEMINI_API_KEY=<key> scripts/dev node e2e/snap_text.test.js
+# against the local dev server (same container):
+BASE_URL=http://localhost:3000 GEMINI_API_KEY=<key> scripts/dev npm run e2e
 ```
 
 `GEMINI_API_KEY` is required because the test sets it in localStorage before
 sign-up so the AI proxy has something to call. Tests fail fast if it's missing.
+`scripts/dev` forwards `GEMINI_API_KEY` and `BASE_URL` from the host shell into
+the container at container-start time.
 
 ## Tests
 

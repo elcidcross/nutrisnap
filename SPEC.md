@@ -268,15 +268,16 @@ Internal fields are stripped before forwarding. The response always includes `_m
 
 ## Build & Deploy
 
+All local commands run inside the Podman container via `scripts/dev` (see [`scripts/dev`](scripts/dev) for the exact `podman run` invocation). The host's `.env.local` / `.env.e2e.local` are injected via `--env-file` when the container is started, so `vercel dev` sees `SUPABASE_URL` / `SUPABASE_ANON_KEY` without an extra `source` step.
+
 ```
 # Local dev (UI only)
-npm start
+scripts/dev npm start
 
 # Local dev WITH the /api/claude proxy (needed to test AI analysis locally)
-# `npm start` can't serve the serverless function, so AI calls 404. Use vercel dev,
-# and source .env.local first so the function inherits SUPABASE_URL / SUPABASE_ANON_KEY
-# (vercel dev does not auto-load .env.local into serverless functions).
-set -a; source .env.local; set +a; vercel dev --listen 3000
+# `npm start` can't serve the serverless function, so AI calls 404. Use vercel dev
+# and bind to 0.0.0.0 so the host's port forward sees it.
+scripts/dev vercel dev --listen 0.0.0.0:3000
 ```
 
 Production deploys are automatic: every push to `main` on GitHub triggers a Vercel production build; every push to another branch gets a preview URL. To force a one-off deploy from your machine without pushing you can still run `vercel --prod`.

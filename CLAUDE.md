@@ -6,20 +6,25 @@ NutriSnap is a mobile-first PWA for AI-assisted nutrition tracking. The full pro
 
 ## Commands
 
+All local commands run inside a Podman container via `scripts/dev` (see [`scripts/dev`](scripts/dev) for the `podman run` invocation). The host needs only `podman`, `git`, `gh`, and `vercel`. `git`/`gh`/`vercel` CLI ops are host-side; `node`/`npm`/`react-scripts`/`vercel dev`/`playwright` are container-side.
+
 ```bash
-npm start                                   # CRA dev server on :3000 (UI only — /api/claude will 404)
-set -a; source .env.local; set +a; vercel dev --listen 3000   # dev server + serverless proxy (needed to exercise AI calls locally)
-npm run build                               # production build
-npm run vercel-build                        # same, with REACT_APP_VERSION + REACT_APP_BUILD_TIME injected
-npm test -- --watchAll=false                # Jest (CRA). Currently covers src/utils/api.test.js (parseJson)
-npm test -- -t "parses a normal"            # run a single Jest test by name
-GEMINI_API_KEY=<key> npm run e2e            # Playwright e2e against BASE_URL (defaults to prod)
-BASE_URL=http://localhost:3000 GEMINI_API_KEY=<key> node e2e/snap_text.test.js   # one e2e file against local
+scripts/dev build                                   # build the dev image (one-time / on package*.json or Containerfile changes)
+scripts/dev npm install                             # populate the nutrisnap-node-modules volume (one-time)
+scripts/dev npm start                               # CRA dev server on :3000 (UI only — /api/claude will 404)
+scripts/dev vercel dev --listen 0.0.0.0:3000        # dev server + serverless proxy. Container --env-file loads .env.local automatically; needs 0.0.0.0 so host port forward sees it
+scripts/dev npm run build                           # production build
+scripts/dev npm test -- --watchAll=false            # Jest (CRA). Currently covers src/utils/api.test.js (parseJson)
+scripts/dev npm test -- -t "parses a normal"        # run a single Jest test by name
+GEMINI_API_KEY=<key> scripts/dev npm run e2e        # Playwright e2e against BASE_URL (defaults to prod). Chromium is baked into the image
+BASE_URL=http://localhost:3000 GEMINI_API_KEY=<key> scripts/dev node e2e/snap_text.test.js  # one e2e file against the local dev server in the same container
+scripts/dev                                          # interactive shell inside the container
+scripts/dev down                                     # stop+remove the container (volume + image stay)
 ```
 
-E2E setup (one-time): `npm install --no-save playwright && npx playwright install chromium`. `GEMINI_API_KEY` is required — tests inject it into localStorage before sign-up.
+`node_modules` lives in a named podman volume (`nutrisnap-node-modules`), not in the host tree — so `ls node_modules` on the host shows nothing. Run `scripts/dev npm install` (not host `npm install`) after pulling changes to `package.json`. Chromium is baked into the image at `/ms-playwright`; bumping the playwright version in package.json should be matched in `Containerfile`.
 
-Release: `npm version patch|minor|major` (creates a tagged commit) → `git push --follow-tags`. Vercel auto-deploys from `main`; the git tag doubles as the deploy marker.
+Release: `npm version patch|minor|major` (creates a tagged commit) → `git push --follow-tags`. Vercel auto-deploys from `main`; the git tag doubles as the deploy marker. `npm version` runs on the host (it commits + tags via git), not via `scripts/dev`.
 
 ## Architecture
 
