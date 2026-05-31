@@ -151,7 +151,7 @@ function MetricChart({ metricKey, period, offset, logs, goalsHistory, total, tar
 }
 
 export default function ReportView({ logs, goalsHistory }) {
-  const [period, setPeriod] = useState('day');
+  const [period, setPeriod] = useState('week');
   const [offset, setOffset] = useState(0);
 
   const win = periodWindow(period, offset);
