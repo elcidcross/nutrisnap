@@ -44,7 +44,6 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   const [imgUrl, setImgUrl] = useState(null);
   const [imgThumb, setImgThumb] = useState(null);
   const [imgB64, setImgB64] = useState(null);
-  const [imgMime, setImgMime] = useState('image/jpeg');
   const [mealName, setMealName] = useState('');
   const [amount, setAmount] = useState(0);
   const [amountUnit, setAmountUnit] = useState('g');
@@ -91,33 +90,39 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
     }
   }, [state, imgThumb, mealName, amount, amountUnit, refAmount, refUnit, refMacros, components, modelUsed, libraryDirty]);
 
-  const makeThumbnail = (objectUrl) => new Promise(resolve => {
+  // Re-encode the image as JPEG at a bounded max dimension. The analysis-grade
+  // size (1600px / q0.85) keeps the request body well under Vercel's 4.5 MB
+  // serverless limit while preserving enough detail for the AI to identify food.
+  const makeJpeg = (objectUrl, maxDim, quality) => new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
-      const MAX = 300;
-      const ratio = Math.min(MAX / img.width, MAX / img.height, 1);
+      const ratio = Math.min(maxDim / img.width, maxDim / img.height, 1);
       const canvas = document.createElement('canvas');
-      canvas.width = img.width * ratio;
-      canvas.height = img.height * ratio;
+      canvas.width = Math.round(img.width * ratio);
+      canvas.height = Math.round(img.height * ratio);
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', 0.7));
+      resolve(canvas.toDataURL('image/jpeg', quality));
     };
+    img.onerror = () => reject(new Error('Could not read photo'));
     img.src = objectUrl;
   });
 
-  const handleFile = e => {
+  const handleFile = async e => {
     const f = e.target.files[0]; if (!f) return;
     setErr(null);
-    setImgMime(f.type || 'image/jpeg');
     const objectUrl = URL.createObjectURL(f);
     setImgUrl(objectUrl);
-    const reader = new FileReader();
-    reader.onload = async ev => {
-      setImgB64(ev.target.result.split(',')[1]);
-      setImgThumb(await makeThumbnail(objectUrl));
+    try {
+      const [analysisDataUrl, thumbDataUrl] = await Promise.all([
+        makeJpeg(objectUrl, 1600, 0.85),
+        makeJpeg(objectUrl, 300, 0.7),
+      ]);
+      setImgB64(analysisDataUrl.split(',')[1]);
+      setImgThumb(thumbDataUrl);
       setState('preview');
-    };
-    reader.readAsDataURL(f);
+    } catch (err) {
+      setErr(err.message || 'Could not read photo');
+    }
   };
 
   const runAnalysis = async (analyzeFn) => {
@@ -169,7 +174,7 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   };
 
   const analyze = async () => {
-    const ok = await runAnalysis(() => analyzeFood(imgB64, imgMime));
+    const ok = await runAnalysis(() => analyzeFood(imgB64, 'image/jpeg'));
     if (!ok) setState('preview');
   };
 

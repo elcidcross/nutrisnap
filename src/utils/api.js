@@ -34,6 +34,9 @@ async function callClaude(body, retries = 2) {
       window.dispatchEvent(new Event('nutrisnap_unauthorized'));
       throw new Error('Unauthorized');
     }
+    if (response.status === 413) {
+      throw new Error('Photo is too large to upload. Try retaking at a lower resolution.');
+    }
     if ((response.status === 429 || response.status === 529 || response.status === 503) && attempt < retries) {
       await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
       continue;
