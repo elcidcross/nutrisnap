@@ -27,7 +27,7 @@ Type a food name or snap a photo. **Phase 1** identifies the food, amount, and a
 
 - **Node.js 18+** — https://nodejs.org
 - **npm** (comes with Node)
-- An **Anthropic API key** — https://console.anthropic.com
+- An API key from one of [Anthropic](https://console.anthropic.com/settings/keys), [OpenAI](https://platform.openai.com/api-keys), or [Google Gemini](https://aistudio.google.com/apikey). The app defaults to Gemini.
 
 ---
 
@@ -43,18 +43,11 @@ npm install
 
 ## 2 — Add your API key
 
-Open `src/utils/api.js` and replace the fetch headers with your key:
+Run the app, sign up, then open **Goals & settings → AI provider**, pick your provider, paste your key, and Save. The key is stored in your browser's `localStorage` and sent to the serverless proxy on each request — never hardcoded in source.
 
-```js
-headers: {
-  'Content-Type': 'application/json',
-  'x-api-key': 'sk-ant-YOUR_KEY_HERE',        // ← add this line
-  'anthropic-version': '2023-06-01',            // ← add this line
-  'anthropic-dangerous-direct-browser-access': 'true',  // ← required for browser
-},
-```
+For a deployment-wide fallback (so users who haven't set their own key still work), set `ANTHROPIC_API_KEY` in your Vercel project's environment variables.
 
-> **Security note:** For production, proxy API calls through your own backend so the key is never exposed in the browser bundle.
+> **Never commit API keys.** The keys above are user-supplied at runtime; do not paste them into `src/` or `.env*` files that are tracked by git.
 
 ---
 
