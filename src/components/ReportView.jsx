@@ -124,7 +124,7 @@ function MetricChart({ metricKey, period, offset, logs, goalsHistory, total, tar
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: v => `${v.dataset.label}: ${fmtVal(v.raw)} ${m.unit}` } } },
         scales: {
-          x: { grid: { display: false }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 }, autoSkip: period !== 'day', maxTicksLimit: period === 'month' ? 10 : undefined, callback: period === 'day' ? function (v, i) { return i % 4 === 0 ? this.getLabelForValue(v) : ''; } : undefined } },
+          x: { grid: { display: false }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 }, autoSkip: period === 'month', maxTicksLimit: period === 'month' ? 10 : undefined, callback: period === 'day' ? function (v, i) { return i % 4 === 0 ? this.getLabelForValue(v) : ''; } : undefined } },
           y: { grid: { color: isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.04)' }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 }, callback: v => v > 0 ? v : '' } },
         },
       },
