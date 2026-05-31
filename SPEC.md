@@ -277,10 +277,9 @@ npm start
 # and source .env.local first so the function inherits SUPABASE_URL / SUPABASE_ANON_KEY
 # (vercel dev does not auto-load .env.local into serverless functions).
 set -a; source .env.local; set +a; vercel dev --listen 3000
-
-# Production deploy (after `npm version <bump>`)
-vercel --prod
 ```
+
+Production deploys are automatic: every push to `main` on GitHub triggers a Vercel production build; every push to another branch gets a preview URL. To force a one-off deploy from your machine without pushing you can still run `vercel --prod`.
 
 Build command: `npm run vercel-build`. Injects `REACT_APP_BUILD_TIME` and `REACT_APP_VERSION` (from `package.json`) at build time. Both are displayed in the bottom nav bar.
 
@@ -294,7 +293,7 @@ Required environment variables on Vercel:
 | `REACT_APP_SUPABASE_ANON_KEY` | Client-side Supabase anon key |
 | `ANTHROPIC_API_KEY` | Optional server-side fallback key for users who haven't set their own |
 
-**Release flow:** bump the version with `npm version patch|minor|major` (creates a tagged commit) → `vercel --prod` → push with `--follow-tags`. The tag doubles as a deploy marker so any historic deploy can be checked out by tag.
+**Release flow:** `npm version patch|minor|major` (creates a tagged commit) → `git push --follow-tags`. Vercel auto-deploys from `main`; the tag still doubles as a deploy marker so any historic deploy can be checked out by tag.
 
 ---
 

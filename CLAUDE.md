@@ -19,7 +19,7 @@ BASE_URL=http://localhost:3000 GEMINI_API_KEY=<key> node e2e/snap_text.test.js  
 
 E2E setup (one-time): `npm install --no-save playwright && npx playwright install chromium`. `GEMINI_API_KEY` is required — tests inject it into localStorage before sign-up.
 
-Release: `npm version patch|minor|major` (creates a tagged commit) → `vercel --prod` → `git push --follow-tags`. The git tag doubles as the deploy marker.
+Release: `npm version patch|minor|major` (creates a tagged commit) → `git push --follow-tags`. Vercel auto-deploys from `main`; the git tag doubles as the deploy marker.
 
 ## Architecture
 

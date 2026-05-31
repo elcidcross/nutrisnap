@@ -74,13 +74,9 @@ Opens at **http://localhost:3000**. Works immediately as a web app on desktop an
 npm run build
 ```
 
-Outputs a `build/` folder. Deploy it to any static host:
+Outputs a `build/` folder. Deploy it to any static host.
 
-Deploy to Vercel:
-
-```bash
-vercel --prod
-```
+**Vercel deploys automatically** on every push to `main` (and creates a preview URL for every other branch). To trigger a one-off production deploy from your machine without pushing, you can still run `vercel --prod`.
 
 Once deployed at an **HTTPS** URL, the PWA is fully installable on all platforms.
 
