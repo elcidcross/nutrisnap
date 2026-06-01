@@ -22,3 +22,6 @@ Thumbs.db
 
 .vercel
 .env*.local
+
+# isolated HOME for the in-container agent (scripts/agent)
+.agent-home/

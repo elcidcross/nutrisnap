@@ -24,6 +24,23 @@ scripts/dev down                                     # stop+remove the container
 
 `node_modules` lives in a named podman volume (`nutrisnap-node-modules`), not in the host tree — so `ls node_modules` on the host shows nothing. Run `scripts/dev npm install` (not host `npm install`) after pulling changes to `package.json`. Chromium is baked into the image at `/ms-playwright`; bumping the playwright version in package.json should be matched in `Containerfile`.
 
+### Isolated agent (`scripts/agent`)
+
+`scripts/agent` runs the Claude Code CLI (or any command) inside a Podman box whose only window onto the host is this repo — host `$HOME` and the rest of the filesystem are not mounted, so the blast radius is `/workspace` plus an isolated, gitignored agent HOME (`.agent-home/`). Because it's boxed, the agent runs with `--dangerously-skip-permissions` by default (no per-command prompts). The agent image (`Containerfile.agent`, built `FROM nutrisnap-dev`) adds the `claude`, `vercel`, and `gh` CLIs.
+
+```bash
+scripts/agent build          # build nutrisnap-agent (also builds nutrisnap-dev if missing)
+scripts/agent                # launch the boxed agent, no permission prompts
+scripts/agent shell          # plain bash shell inside the box
+scripts/agent <cmd> [args]   # run an arbitrary command in the box
+AGENT_NET=none scripts/agent # strongest: fully offline (repo ownership preserved)
+AGENT_FIREWALL=1 scripts/agent  # egress allowlist (AI providers, Vercel, GitHub, npm, Supabase)
+```
+
+Auth seeded into the box (so it can also commit/push on its own): `~/.claude/.credentials.json`, `~/.gitconfig`, and `~/.ssh` are copied once into `.agent-home/` (gitignored); the GitHub token is pulled from the host keyring via `gh auth token` and injected as `GH_TOKEN` (env only). Both SSH remotes (GitHub `origin`, Codeberg) push from inside the box. `AGENT_NO_SSH=1` keeps your SSH key out of the box (no push). The image includes `openssh-client` for this.
+
+`AGENT_FIREWALL=1` runs the box as root + `NET_ADMIN` to apply the iptables allowlist (`scripts/agent-firewall.sh`), so files it writes are sub-uid owned — reclaim with `podman unshare chown -R 0:0 <path>`; prefer it for headless runs. Default and `AGENT_NET=none` modes use `--userns=keep-id`, preserving repo file ownership.
+
 Release: `npm version patch|minor|major` (creates a tagged commit) → `git push --follow-tags`. Vercel auto-deploys from `main`; the git tag doubles as the deploy marker. `npm version` runs on the host (it commits + tags via git), not via `scripts/dev`.
 
 ## Architecture

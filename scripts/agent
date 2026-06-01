@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# Run the Claude Code agent (or any command) INSIDE an isolated Podman container
+# whose only window onto your machine is this repo. The host filesystem, your
+# real $HOME, and your shell environment are NOT visible to the agent — the blast
+# radius of anything it does is /workspace (this repo) and an isolated agent HOME.
+#
+# Because of that isolation you can safely let the agent run without per-command
+# approval prompts (it can't touch anything outside the box). The wrapper passes
+# --dangerously-skip-permissions by default for exactly this reason.
+#
+# Usage:
+#   scripts/agent build              build the agent image (one-time / on changes)
+#   scripts/agent                    launch the Claude Code agent (interactive)
+#   scripts/agent shell              a plain bash shell inside the box
+#   scripts/agent <cmd> [args...]    run an arbitrary command inside the box
+#   scripts/agent claude -p "..."    headless/print mode, etc.
+#
+# Network modes (env):
+#   (default)            full network — needed for AI providers, npm, Supabase
+#   AGENT_NET=none       no network at all (strongest; offline tasks only)
+#   AGENT_FIREWALL=1     egress allowlist only (AI providers, Vercel, GitHub,
+#                        npm, Supabase). Runs the box as root + NET_ADMIN so the
+#                        firewall can be applied, then drops to your user.
+#
+# Auth: your Claude credentials are copied (once) into the isolated agent HOME so
+# the in-container CLI is logged in. They live in .agent-home/ (gitignored), not
+# shared live with your host session.
+
+set -euo pipefail
+
+IMAGE=nutrisnap-agent
+BASE_IMAGE=nutrisnap-dev
+CONTAINER=nutrisnap-agent
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+AGENT_HOME="$REPO_ROOT/.agent-home"   # isolated HOME for the in-container agent
+
+cmd_build() {
+  podman image exists "$BASE_IMAGE" || \
+    podman build -t "$BASE_IMAGE" -f "$REPO_ROOT/Containerfile" "$REPO_ROOT"
+  podman build -t "$IMAGE" -f "$REPO_ROOT/Containerfile.agent" "$REPO_ROOT"
+}
+
+seed_home() {
+  mkdir -p "$AGENT_HOME/.claude"
+  # Copy Claude credentials in once so the in-container CLI is authenticated.
+  # After that the container manages its own copy in .agent-home/.
+  if [ -f "$HOME/.claude/.credentials.json" ] && [ ! -f "$AGENT_HOME/.claude/.credentials.json" ]; then
+    cp "$HOME/.claude/.credentials.json" "$AGENT_HOME/.claude/.credentials.json"
+  fi
+
+  # git identity, so commits made in the box have the right author.
+  if [ -f "$HOME/.gitconfig" ] && [ ! -f "$AGENT_HOME/.gitconfig" ]; then
+    cp "$HOME/.gitconfig" "$AGENT_HOME/.gitconfig"
+  fi
+
+  # SSH keys so the box can `git push` to the SSH remotes. Copied (not
+  # bind-mounted) because a :Z bind-mount would relabel the host ~/.ssh and can
+  # break host SSH. Set AGENT_NO_SSH=1 to keep your key out of the box.
+  if [ "${AGENT_NO_SSH:-0}" != "1" ] && [ -d "$HOME/.ssh" ] && [ ! -d "$AGENT_HOME/.ssh" ]; then
+    cp -r "$HOME/.ssh" "$AGENT_HOME/.ssh"
+    chmod 700 "$AGENT_HOME/.ssh" 2>/dev/null || true
+    chmod 600 "$AGENT_HOME/.ssh"/* 2>/dev/null || true
+    chmod 644 "$AGENT_HOME/.ssh"/*.pub 2>/dev/null || true
+  fi
+}
+
+cmd_run() {
+  podman image exists "$IMAGE" || cmd_build
+  seed_home
+  podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
+
+  # Only the repo and the isolated HOME are mounted. Note: NO host $HOME, NO
+  # extra volumes. node_modules from the dev volume is reused for tooling.
+  local args=(
+    --rm
+    --name "$CONTAINER"
+    --hostname agent-box
+    -v "$REPO_ROOT:/workspace:Z"
+    -v "$AGENT_HOME:/home/node:Z"
+    -v nutrisnap-node-modules:/workspace/node_modules
+    -e HOME=/home/node
+    -w /workspace
+  )
+  [ -t 0 ] && [ -t 1 ] && args+=(-it)
+
+  # Project secrets, same as scripts/dev.
+  [ -f "$REPO_ROOT/.env.local" ]     && args+=(--env-file "$REPO_ROOT/.env.local")
+  [ -f "$REPO_ROOT/.env.e2e.local" ] && args+=(--env-file "$REPO_ROOT/.env.e2e.local")
+
+  # Forward an API key if the user drives auth that way instead of OAuth.
+  [ -n "${ANTHROPIC_API_KEY:-}" ] && args+=(-e "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
+
+  # gh auth: the host token lives in the keyring, so we pull it with `gh auth
+  # token` and inject it as GH_TOKEN (env only — not written into .agent-home).
+  # Lets `gh` (PRs, issues, API) work in the box. git push still uses SSH above.
+  if command -v gh >/dev/null 2>&1; then
+    local ghtok; ghtok="$(gh auth token 2>/dev/null || true)"
+    [ -n "$ghtok" ] && args+=(-e "GH_TOKEN=$ghtok")
+  fi
+
+  # Network mode.
+  #  - none:     fully offline; strongest, repo ownership preserved (keep-id).
+  #  - firewall: egress allowlist. Must run as root + NET_ADMIN to apply iptables,
+  #              so keep-id can't be used; files the agent writes will be owned by
+  #              a sub-uid. Reclaim with: podman unshare chown -R 0:0 <path>.
+  #              Best for headless/ephemeral runs that push via git anyway.
+  #  - default:  full network, repo ownership preserved (keep-id), :3000 published.
+  if [ "${AGENT_NET:-}" = "none" ]; then
+    args+=(--network=none --userns=keep-id)
+  elif [ "${AGENT_FIREWALL:-0}" = "1" ]; then
+    args+=(--user 0 --cap-add=NET_ADMIN --cap-add=NET_RAW -e AGENT_FIREWALL=1 -p 3000:3000)
+  else
+    args+=(--userns=keep-id -p 3000:3000)
+  fi
+
+  # Default command: the agent, unprompted (safe — it's boxed). Override by
+  # passing your own command.
+  local run_cmd=("$@")
+  if [ ${#run_cmd[@]} -eq 0 ]; then
+    run_cmd=(claude --dangerously-skip-permissions)
+  fi
+
+  exec podman run "${args[@]}" "$IMAGE" "${run_cmd[@]}"
+}
+
+case "${1:-run}" in
+  build) shift; cmd_build "$@" ;;
+  shell) shift; cmd_run bash ;;
+  run)   shift; cmd_run "$@" ;;
+  *)     cmd_run "$@" ;;
+esac

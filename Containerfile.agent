@@ -1,0 +1,37 @@
+# Agent image: the dev toolchain (Containerfile) PLUS the tools the agent needs
+# to drive this repo end to end — the Claude Code CLI, the Vercel CLI, and gh.
+# Build the base first (scripts/agent build does this for you):
+#   podman build -t nutrisnap-dev   -f Containerfile       .
+#   podman build -t nutrisnap-agent -f Containerfile.agent .
+FROM nutrisnap-dev
+
+USER root
+
+# gh (official apt repo) + tools the optional egress firewall needs (iptables,
+# ipset, dnsutils for resolving the allowlist). curl/gnupg for the gh key.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl gnupg iptables ipset dnsutils openssh-client \
+ && mkdir -p -m 755 /etc/apt/keyrings \
+ && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+ && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends gh \
+ && rm -rf /var/lib/apt/lists/*
+
+# Claude Code CLI + Vercel CLI, installed globally so they're on PATH for any user.
+RUN npm install -g @anthropic-ai/claude-code vercel \
+ && rm -rf /root/.npm
+
+COPY scripts/agent-entrypoint.sh /usr/local/bin/agent-entrypoint.sh
+COPY scripts/agent-firewall.sh   /usr/local/bin/agent-firewall.sh
+RUN chmod +x /usr/local/bin/agent-entrypoint.sh /usr/local/bin/agent-firewall.sh
+
+USER node
+
+# tini (from the base) reaps zombies; our entrypoint optionally applies the
+# firewall, then execs the requested command.
+ENTRYPOINT ["tini", "--", "/usr/local/bin/agent-entrypoint.sh"]
+CMD ["claude"]
