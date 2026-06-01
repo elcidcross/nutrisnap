@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(node -e \"require\\('./src/utils/api.js'\\)\")",
+      "Bash(node --check src/utils/api.js)",
+      "Bash(vercel alias *)",
+      "Bash(npx eslint *)",
+      "Bash(node -e 'const r1=n=>Math.round\\(n*10\\)/10; function calc\\(amount,refAmount,rm\\){const ratio=refAmount>0?amount/refAmount:0; return {cal:Math.round\\(ratio*\\(rm.calories||0\\)\\)}} console.log\\(\"empty amount macros:\", JSON.stringify\\(calc\\(\"\",100,{calories:200}\\)\\)\\)')",
+      "Bash(node -e ' *)",
+      "Bash(vercel --prod --yes)",
+      "Bash(node -p \"require\\('./package.json'\\).version\")",
+      "Bash(npx react-scripts *)",
+      "Bash(lsof -ti:3000)",
+      "Bash(xargs -r kill)",
+      "Bash(rm -f /tmp/relog_verify.js /tmp/debug_analyze.js)",
+      "Bash(vercel --version)",
+      "Bash(vercel whoami *)",
+      "Bash(vercel project *)",
+      "Bash(python3 -c \"import json;print\\(json.load\\(open\\('/home/elcidx/.local/share/com.vercel.cli/auth.json'\\)\\)['token']\\)\")",
+      "Bash(python3 -)",
+      "Bash(curl -s --max-time 30 'https://api.vercel.com/v3/deployments/__TRACKED_VAR__/events?teamId=__TRACKED_VAR__&since=1780279200000&until=1780282800000&direction=forward&limit=200' -H 'Authorization: Bearer __TRACKED_VAR__' -o /tmp/vlogs.json -w 'HTTP %{http_code}\\\\n')",
+      "Read(//tmp/**)",
+      "Bash(awk -F= '/^SUPABASE_URL=/{v=substr\\($0,index\\($0,\"=\"\\)+1\\); print \"URL starts:\", substr\\(v,1,12\\); print \"URL len:\", length\\(v\\)}' .env.local)",
+      "Bash(awk -F= '/^SUPABASE_ANON_KEY=/{v=substr\\($0,index\\($0,\"=\"\\)+1\\); print \"ANON starts:\", substr\\(v,1,6\\), \"len:\", length\\(v\\)}' .env.local)",
+      "Bash(awk -F= '/^APP_PASSWORD=/{v=substr\\($0,index\\($0,\"=\"\\)+1\\); print \"PW quoted?:\", \\(substr\\(v,1,1\\)==\"\\\\\"\" ? \"yes\" : \"no\"\\), \"len:\", length\\(v\\)}' .env.local)",
+      "Bash(scripts/dev sh *)"
+    ]
+  }
+}
