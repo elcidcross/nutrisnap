@@ -21,6 +21,8 @@ module.exports = async (req, res) => {
     headers: { 'Authorization': `Bearer ${token}`, 'apikey': supabaseAnonKey },
   }).catch(() => null);
   if (!authRes || !authRes.ok) return res.status(401).json({ error: 'Unauthorized' });
+  let userId = null;
+  try { userId = (await authRes.json())?.id || null; } catch (_) {}
 
   const provider = body._provider || 'anthropic';
   const apiKey = body._userApiKey || process.env.ANTHROPIC_API_KEY;
@@ -41,9 +43,40 @@ module.exports = async (req, res) => {
     }
     return res.status(200).json({ ...clean, _modelUsed });
   } catch (err) {
-    return res.status(err.status || 500).json({ error: err.message });
+    const status = err.status || 500;
+    // Durably record the failure so it survives Vercel's short log retention.
+    await logError(supabaseUrl, supabaseAnonKey, token, userId, {
+      provider,
+      model: aiBody.model || null,
+      status,
+      message: err.message || 'Unknown error',
+      context: { jsonResponse: !!_jsonResponse },
+    });
+    return res.status(status).json({ error: err.message });
   }
 };
+
+// Fire an insert into the error_log table using the caller's already-validated
+// JWT, so the existing auth.uid() = user_id RLS policy applies (no service-role
+// key needed). Awaited (not fire-and-forget) so the write completes before the
+// serverless function freezes; failures here are swallowed and never surfaced.
+async function logError(supabaseUrl, anonKey, token, userId, entry) {
+  if (!userId) return;
+  try {
+    await fetch(`${supabaseUrl}/rest/v1/error_log`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': anonKey,
+        'Authorization': `Bearer ${token}`,
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify({ user_id: userId, ...entry }),
+    });
+  } catch (e) {
+    console.error('error_log insert failed:', e.message);
+  }
+}
 
 // Detect assistant prefill (Anthropic style: last message is { role: 'assistant' })
 // and strip it so OpenAI/Gemini don't choke, then re-prepend its content to the response.
