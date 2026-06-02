@@ -103,19 +103,26 @@ cmd_run() {
     [ -n "$ghtok" ] && args+=(-e "GH_TOKEN=$ghtok")
   fi
 
+  # Port publishing. The dev box (scripts/dev) is what normally serves the app
+  # on host :3000; the agent box only needs it if you run the app *inside* the
+  # agent, which is rare. Publishing it from here would block `scripts/dev` from
+  # binding the same host port, so leave it unpublished unless AGENT_PORT=1.
+  local publish=()
+  [ "${AGENT_PORT:-0}" = "1" ] && publish+=(-p 3000:3000)
+
   # Network mode.
   #  - none:     fully offline; strongest, repo ownership preserved (keep-id).
   #  - firewall: egress allowlist. Must run as root + NET_ADMIN to apply iptables,
   #              so keep-id can't be used; files the agent writes will be owned by
   #              a sub-uid. Reclaim with: podman unshare chown -R 0:0 <path>.
   #              Best for headless/ephemeral runs that push via git anyway.
-  #  - default:  full network, repo ownership preserved (keep-id), :3000 published.
+  #  - default:  full network, repo ownership preserved (keep-id).
   if [ "${AGENT_NET:-}" = "none" ]; then
     args+=(--network=none --userns=keep-id)
   elif [ "${AGENT_FIREWALL:-0}" = "1" ]; then
-    args+=(--user 0 --cap-add=NET_ADMIN --cap-add=NET_RAW -e AGENT_FIREWALL=1 -p 3000:3000)
+    args+=(--user 0 --cap-add=NET_ADMIN --cap-add=NET_RAW -e AGENT_FIREWALL=1 "${publish[@]}")
   else
-    args+=(--userns=keep-id -p 3000:3000)
+    args+=(--userns=keep-id "${publish[@]}")
   fi
 
   # Default command: the agent, unprompted (safe — it's boxed). Override by

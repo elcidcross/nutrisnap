@@ -21,8 +21,9 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends gh \
  && rm -rf /var/lib/apt/lists/*
 
-# Claude Code CLI + Vercel CLI, installed globally so they're on PATH for any user.
-RUN npm install -g @anthropic-ai/claude-code vercel \
+# Claude Code CLI, installed globally so it's on PATH for any user. The Vercel
+# CLI is inherited from the base (nutrisnap-dev) image.
+RUN npm install -g @anthropic-ai/claude-code \
  && rm -rf /root/.npm
 
 COPY scripts/agent-entrypoint.sh /usr/local/bin/agent-entrypoint.sh

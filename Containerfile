@@ -16,6 +16,11 @@ RUN apt-get update \
  && chown -R node:node /ms-playwright \
  && rm -rf /var/lib/apt/lists/* /tmp/* /root/.npm
 
+# Vercel CLI, installed globally so `vercel dev` (CRA dev server + the
+# /api/claude serverless proxy) is on PATH for the runtime `node` user. This is
+# the dev box's documented dev-server command (scripts/dev vercel dev).
+RUN npm install -g vercel && rm -rf /root/.npm
+
 WORKDIR /workspace
 RUN chown node:node /workspace
 

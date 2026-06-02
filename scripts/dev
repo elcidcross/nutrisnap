@@ -55,7 +55,7 @@ cmd_up() {
     --userns=keep-id \
     -v "$REPO_ROOT:/workspace:z" \
     -v "$VOLUME:/workspace/node_modules" \
-    -p 3000:3000 \
+    -p "${DEV_PORT:-3000}:${DEV_PORT:-3000}" \
     "${env_args[@]}" \
     -w /workspace \
     "$IMAGE" \
