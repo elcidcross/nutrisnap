@@ -219,4 +219,103 @@ export async function updateFoodInLibrary(userId, name, macros) {
   if (error) throw error;
 }
 
+// Activities each get their own table (sql/jogs.sql, sql/workouts.sql,
+// sql/meditations.sql) so a column means exactly one thing per table — notably
+// `duration` is seconds for jogs but minutes for workouts/meditations. The
+// tables are structurally identical CRUD-wise, so one factory builds the
+// load/save/update/remove for each from its column list. These columns have no
+// snake_case ↔ camelCase gap, so no field remapping is needed (unlike body_fat).
+function activityTable(table, cols) {
+  const toRow = (userId, e) => {
+    const row = { id: e.id, user_id: userId, timestamp: e.timestamp };
+    cols.forEach(c => { row[c] = e[c] ?? null; });
+    return row;
+  };
+  const toObj = (row) => {
+    const o = { id: row.id, timestamp: row.timestamp };
+    cols.forEach(c => { o[c] = row[c] ?? null; });
+    return o;
+  };
+  return {
+    async load(userId) {
+      const { data, error } = await supabase
+        .from(table).select('*').eq('user_id', userId)
+        .order('timestamp', { ascending: false });
+      if (error) throw error;
+      return (data || []).map(toObj);
+    },
+    async save(userId, entry) {
+      const { error } = await supabase.from(table).insert(toRow(userId, entry));
+      if (error) throw error;
+    },
+    async update(userId, id, updates) {
+      const row = {};
+      cols.forEach(c => { if (updates[c] !== undefined) row[c] = updates[c]; });
+      if (updates.timestamp !== undefined) row.timestamp = updates.timestamp;
+      const { error } = await supabase.from(table).update(row).eq('id', id).eq('user_id', userId);
+      if (error) throw error;
+    },
+    async remove(userId, id) {
+      const { error } = await supabase.from(table).delete().eq('id', id).eq('user_id', userId);
+      if (error) throw error;
+    },
+  };
+}
+
+export const jogs = activityTable('jogs', ['duration', 'distance', 'notes']);
+export const workouts = activityTable('workouts', ['duration', 'name', 'notes']);
+export const meditations = activityTable('meditations', ['duration', 'notes']);
+
+// Body metrics (weight / body fat) — see sql/body_metrics.sql.
+function rowToMetric(row) {
+  return {
+    id: row.id,
+    timestamp: row.timestamp,
+    weight: row.weight ?? null,
+    bodyFat: row.body_fat ?? null,
+    notes: row.notes ?? null,
+  };
+}
+
+function metricToRow(userId, entry) {
+  return {
+    id: entry.id,
+    user_id: userId,
+    timestamp: entry.timestamp,
+    weight: entry.weight ?? null,
+    body_fat: entry.bodyFat ?? null,
+    notes: entry.notes ?? null,
+  };
+}
+
+export async function getBodyMetrics(userId) {
+  const { data, error } = await supabase
+    .from('body_metrics')
+    .select('*')
+    .eq('user_id', userId)
+    .order('timestamp', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(rowToMetric);
+}
+
+export async function saveBodyMetric(userId, entry) {
+  const { error } = await supabase.from('body_metrics').insert(metricToRow(userId, entry));
+  if (error) throw error;
+}
+
+export async function updateBodyMetric(userId, id, updates) {
+  const row = {};
+  if (updates.weight !== undefined) row.weight = updates.weight;
+  if (updates.bodyFat !== undefined) row.body_fat = updates.bodyFat;
+  if (updates.notes !== undefined) row.notes = updates.notes;
+  if (updates.timestamp !== undefined) row.timestamp = updates.timestamp;
+  const { error } = await supabase.from('body_metrics').update(row).eq('id', id).eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function deleteBodyMetric(userId, id) {
+  const { error } = await supabase.from('body_metrics').delete().eq('id', id).eq('user_id', userId);
+  if (error) throw error;
+}
+
 export { DEFAULT_GOALS, DEFAULT_NOTIF };
