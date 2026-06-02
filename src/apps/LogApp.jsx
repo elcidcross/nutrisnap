@@ -1,21 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import AppShell from '../components/AppShell';
+import LogReport from './LogReport';
+import LogGoals from './LogGoals';
+import { getAppGoals, saveAppGoal } from '../utils/db';
 import { todayStr, fmtTime, fmtDate } from '../utils/date';
 
-// Generic "simple log" app: a chronological list of entries grouped by day plus a
-// floating add button that opens an entry sheet. Jog / Workout / Meditation / Body
-// are all instances of this, differing only in their `config` (fields, summary,
-// accent, and the db CRUD functions). Charts/trends are a deliberate future add —
-// the structure leaves room for a second tab without reworking this.
+// Generic "simple log" app: a chronological list of entries grouped by day with an
+// entry sheet for add/edit. Jog / Workout / Meditation / Body are all instances of
+// this, differing only in their `config`. An app stays a single list + floating add
+// button until it opts into trends by declaring `report`/`goals`, at which point it
+// gains the NutriSnap-style bottom nav (Log · Add · Report · Goals) with the version.
 //
 // config: {
 //   appName, accent, icon, emptyHint,
-//   fields: [{ key, label, unit?, type: 'number'|'text', placeholder?, step? }],
+//   fields: [{ key, label, unit?, type: 'number'|'text'|'duration', placeholder?, step?, default? }],
 //   summary: (entry) => string,
-//   load:   (userId) => Promise<entry[]>,
-//   create: (userId, entry) => Promise,
-//   update: (userId, id, updates) => Promise,
-//   remove: (userId, id) => Promise,
+//   load/create/update/remove: db CRUD,
+//   app?:    string,            // goal-storage key (required if `goals`/`report` overlay used)
+//   report?: see LogReport,     // enables the Report tab (charts + stats)
+//   goals?:  see LogGoals,      // enables the Goals tab (synced targets)
 // }
 
 // The activity / body_metrics tables use uuid primary keys, so generate a
@@ -59,22 +62,36 @@ export function fmtDuration(secs) {
 }
 
 export default function LogApp({ config, user, active, apps, activeApp, onSwitch }) {
-  const { appName, accent, icon, emptyHint, fields, summary, load, create, update, remove } = config;
+  const { appName, accent, icon, emptyHint, fields, summary, load, create, update, remove, app, report, goals } = config;
+  const tabbed = !!(report || goals); // Jog/Body opt in to List/Report/Goals; others keep a single list + FAB.
   const [logs, setLogs] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const loadingRef = useRef(false);
   const [sheet, setSheet] = useState(null); // null | { id?, draft }
+  const [view, setView] = useState('list'); // 'list' | 'report' | 'goals'
+  const [goalValues, setGoalValues] = useState({});
 
   // Lazy load: only fetch the first time this app becomes active. Because the
   // component stays mounted (it returns null when inactive) the data persists, so
-  // switching away and back is instant — no reload.
+  // switching away and back is instant — no reload. Goals load alongside logs so
+  // both the Goals tab and the Report's goal overlay have them immediately.
   useEffect(() => {
     if (!active || loaded || loadingRef.current) return;
     loadingRef.current = true;
     load(user.id).then(setLogs).catch(console.error).finally(() => setLoaded(true));
-  }, [active, loaded, user.id, load]);
+    if (tabbed && app) getAppGoals(user.id, app).then(setGoalValues).catch(console.error);
+  }, [active, loaded, user.id, load, tabbed, app]);
 
   if (!active) return null;
+
+  const saveGoal = (key, value) => {
+    setGoalValues(g => ({ ...g, [key]: value }));
+    saveAppGoal(user.id, app, key, value).catch(console.error);
+  };
+
+  // The "Add" nav item is an action, not a view: it opens the entry sheet and
+  // leaves the active tab where it was.
+  const onTabChange = (id) => { if (id === 'add') openAdd(); else setView(id); };
 
   const openAdd = () => {
     const draft = { when: toLocalInput(Date.now()) };
@@ -126,36 +143,56 @@ export default function LogApp({ config, user, active, apps, activeApp, onSwitch
     grouped[day].push(l);
   });
 
-  const subtitle = loaded ? (logs.length === 1 ? '1 entry' : `${logs.length} entries`) : '';
+  const spinner = (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0' }}>
+      <div style={{ width: 30, height: 30, border: `3px solid ${accent}22`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
+    </div>
+  );
+
+  const listView = logs.length === 0 ? (
+    <div style={{ textAlign: 'center', padding: '56px 24px', color: '#aaa' }}>
+      <i className={`ti ${icon}`} style={{ fontSize: 56, display: 'block', marginBottom: 12, color: `${accent}66` }} aria-hidden="true" />
+      <p style={{ fontSize: 14, lineHeight: 1.6 }}>{emptyHint}</p>
+    </div>
+  ) : (
+    Object.entries(grouped).map(([day, entries]) => (
+      <div key={day}>
+        <div style={{ padding: '10px 16px 6px', fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '.5px', background: '#f5f5f0' }}>
+          {day === todayStr() ? 'Today' : fmtDate(entries[0].timestamp)}
+        </div>
+        {entries.map(e => (
+          <Row key={e.id} entry={e} icon={icon} accent={accent} summary={summary} appName={appName}
+            onEdit={() => openEdit(e)} onDelete={del} />
+        ))}
+      </div>
+    ))
+  );
+
+  let content;
+  if (!loaded) content = spinner;
+  else if (view === 'report') content = <LogReport logs={logs} report={report} goals={goalValues} accent={accent} />;
+  else if (view === 'goals') content = <LogGoals goals={goals} values={goalValues} onSave={saveGoal} accent={accent} />;
+  else content = listView;
+
+  const subtitle = loaded && view === 'list' ? (logs.length === 1 ? '1 entry' : `${logs.length} entries`) : '';
+
+  const tabs = tabbed ? [
+    { id: 'list', icon: 'ti-list', label: 'Log' },
+    { id: 'add', icon: 'ti-plus', label: 'Add', fab: true },
+    ...(report ? [{ id: 'report', icon: 'ti-chart-line', label: 'Report' }] : []),
+    ...(goals ? [{ id: 'goals', icon: 'ti-target', label: 'Goals' }] : []),
+  ] : null;
+
+  const shellNav = tabbed
+    ? { tabs, activeTab: view, onTabChange }
+    : { fab: { icon: 'ti-plus', label: `Add ${appName.toLowerCase()}`, onClick: openAdd } };
 
   return (
     <AppShell apps={apps} activeApp={activeApp} onSwitch={onSwitch} accent={accent}
-      title={appName} subtitle={subtitle}
-      fab={{ icon: 'ti-plus', label: `Add ${appName.toLowerCase()}`, onClick: openAdd }}>
+      title={appName} subtitle={subtitle} {...shellNav}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
-      {!loaded ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0' }}>
-          <div style={{ width: 30, height: 30, border: `3px solid ${accent}22`, borderTopColor: accent, borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
-        </div>
-      ) : logs.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '56px 24px', color: '#aaa' }}>
-          <i className={`ti ${icon}`} style={{ fontSize: 56, display: 'block', marginBottom: 12, color: `${accent}66` }} aria-hidden="true" />
-          <p style={{ fontSize: 14, lineHeight: 1.6 }}>{emptyHint}</p>
-        </div>
-      ) : (
-        Object.entries(grouped).map(([day, entries]) => (
-          <div key={day}>
-            <div style={{ padding: '10px 16px 6px', fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '.5px', background: '#f5f5f0' }}>
-              {day === todayStr() ? 'Today' : fmtDate(entries[0].timestamp)}
-            </div>
-            {entries.map(e => (
-              <Row key={e.id} entry={e} icon={icon} accent={accent} summary={summary} appName={appName}
-                onEdit={() => openEdit(e)} onDelete={del} />
-            ))}
-          </div>
-        ))
-      )}
+      {content}
 
       {sheet && (
         <EntrySheet appName={appName} accent={accent} fields={fields} sheet={sheet}

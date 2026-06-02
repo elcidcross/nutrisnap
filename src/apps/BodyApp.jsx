@@ -6,6 +6,7 @@ const CONFIG = {
   appName: 'Body',
   accent: '#d4537e',
   icon: 'ti-scale',
+  app: 'body',
   emptyHint: 'No measurements yet.\nTap + to log your weight & body fat.',
   fields: [
     { key: 'weight', label: 'Weight', unit: 'kg', type: 'number', placeholder: '70' },
@@ -28,6 +29,27 @@ const CONFIG = {
   create: saveBodyMetric,
   update: updateBodyMetric,
   remove: deleteBodyMetric,
+  report: {
+    series: [
+      { key: 'weight', label: 'Weight', unit: 'kg', color: '#d4537e', value: e => e.weight ?? null, goalKey: 'target_weight' },
+      { key: 'bodyFat', label: 'Body fat', unit: '%', color: '#ba7517', value: e => e.bodyFat ?? null, goalKey: 'target_body_fat', lowerBetter: true },
+      { key: 'muscleMass', label: 'Muscle mass', unit: 'kg', color: '#1d9e75', value: e => e.muscleMass ?? null },
+    ],
+    summary: (entries, goals) => {
+      if (!entries.length) return [];
+      const sorted = [...entries].sort((a, b) => a.timestamp - b.timestamp);
+      const latest = sorted[sorted.length - 1];
+      const cards = [];
+      if (latest.weight != null) cards.push({ label: 'weight', value: `${latest.weight} kg`, sub: goals.target_weight ? `goal ${goals.target_weight}` : null });
+      if (latest.bodyFat != null) cards.push({ label: 'body fat', value: `${latest.bodyFat}%`, sub: goals.target_body_fat ? `goal ${goals.target_body_fat}%` : null });
+      if (latest.muscleMass != null) cards.push({ label: 'muscle', value: `${latest.muscleMass} kg` });
+      return cards;
+    },
+  },
+  goals: [
+    { key: 'target_weight', label: 'Target weight', unit: 'kg', placeholder: '63' },
+    { key: 'target_body_fat', label: 'Target body fat', unit: '%', placeholder: '18' },
+  ],
 };
 
 export default function BodyApp(props) {

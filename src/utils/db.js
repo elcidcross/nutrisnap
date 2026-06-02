@@ -324,4 +324,21 @@ export async function deleteBodyMetric(userId, id) {
   if (error) throw error;
 }
 
+// Per-app goals (Jog/Body report targets) — see sql/app_goals.sql. Returned as a
+// flat { key: value } map for the active app; (user_id, app, key) is a real unique
+// constraint so upsert can use it (unlike food_library's functional index).
+export async function getAppGoals(userId, app) {
+  const { data, error } = await supabase
+    .from('app_goals').select('key, value').eq('user_id', userId).eq('app', app);
+  if (error) throw error;
+  return Object.fromEntries((data || []).map(r => [r.key, r.value]));
+}
+
+export async function saveAppGoal(userId, app, key, value) {
+  const { error } = await supabase
+    .from('app_goals')
+    .upsert({ user_id: userId, app, key, value }, { onConflict: 'user_id,app,key' });
+  if (error) throw error;
+}
+
 export { DEFAULT_GOALS, DEFAULT_NOTIF };
