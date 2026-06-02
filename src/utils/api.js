@@ -24,11 +24,24 @@ async function callClaude(body, retries = 2) {
   const { _provider, _userApiKey } = getApiMeta();
   const _supabaseToken = await getToken();
   for (let attempt = 0; attempt <= retries; attempt++) {
-    const response = await fetch(PROXY, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...body, _supabaseToken, _provider, _userApiKey }),
-    });
+    let response;
+    try {
+      response = await fetch(PROXY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, _supabaseToken, _provider, _userApiKey }),
+      });
+    } catch (e) {
+      // fetch() rejects (no HTTP response at all) on a network-level failure —
+      // e.g. a dropped cellular upload, which iOS Safari surfaces as the opaque
+      // "Load failed". Retry these like a transient 503; only surface a friendly
+      // message once the retries are exhausted.
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      throw new Error('Network error — check your connection and try again.');
+    }
     if (response.status === 401) {
       await supabase.auth.signOut();
       window.dispatchEvent(new Event('nutrisnap_unauthorized'));
