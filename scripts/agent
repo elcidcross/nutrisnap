@@ -72,11 +72,15 @@ cmd_run() {
 
   # Only the repo and the isolated HOME are mounted. Note: NO host $HOME, NO
   # extra volumes. node_modules from the dev volume is reused for tooling.
+  # Repo is mounted :z (shared label) so it coexists with the nutrisnap-dev box,
+  # which mounts the same tree — a private :Z relabel from either side would lock
+  # the other out (SELinux MCS). The agent HOME stays :Z (private): only this box
+  # mounts it, so keeping its credentials category-isolated is the intent.
   local args=(
     --rm
     --name "$CONTAINER"
     --hostname agent-box
-    -v "$REPO_ROOT:/workspace:Z"
+    -v "$REPO_ROOT:/workspace:z"
     -v "$AGENT_HOME:/home/node:Z"
     -v nutrisnap-node-modules:/workspace/node_modules
     -e HOME=/home/node

@@ -44,10 +44,16 @@ cmd_up() {
   [ -f "$REPO_ROOT/.env.local" ]      && env_args+=(--env-file "$REPO_ROOT/.env.local")
   [ -f "$REPO_ROOT/.env.e2e.local" ]  && env_args+=(--env-file "$REPO_ROOT/.env.e2e.local")
 
+  # Repo is mounted :z (shared SELinux label), NOT :Z (private). The repo is
+  # shared with the nutrisnap-agent box, whose isolated HOME lives at
+  # .agent-home/ *inside* this tree. :Z would recursively relabel the whole repo
+  # — including .agent-home/.claude/.credentials.json — to a category private to
+  # this container, locking a running agent out of its own Claude credentials
+  # (it gets logged out). :z uses the shared label, readable by both boxes.
   podman run -d \
     --name "$CONTAINER" \
     --userns=keep-id \
-    -v "$REPO_ROOT:/workspace:Z" \
+    -v "$REPO_ROOT:/workspace:z" \
     -v "$VOLUME:/workspace/node_modules" \
     -p 3000:3000 \
     "${env_args[@]}" \
