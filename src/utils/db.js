@@ -266,26 +266,32 @@ export const jogs = activityTable('jogs', ['duration', 'distance', 'notes']);
 export const workouts = activityTable('workouts', ['duration', 'name', 'notes']);
 export const meditations = activityTable('meditations', ['duration', 'notes']);
 
-// Body metrics (weight / body fat) — see sql/body_metrics.sql.
+// Body metrics (weight + smart-scale composition) — see sql/body_metrics.sql.
+// camelCase property ↔ snake_case column. Only measured metrics are stored;
+// derived values (fat mass, BMI, standard weight, …) are recomputed if needed.
+const METRIC_COLS = {
+  weight: 'weight',           // kg
+  height: 'height',           // m (entered each time; BMI/std weight/obesity derive from it)
+  bodyFat: 'body_fat',        // %
+  muscleMass: 'muscle_mass',  // kg
+  bodyWater: 'body_water',    // %
+  boneMass: 'bone_mass',      // kg
+  bmr: 'bmr',                 // kcal
+  visceralFat: 'visceral_fat',// level
+  legScore: 'leg_score',      // proprietary leg-muscle index (not derivable)
+  notes: 'notes',
+};
+
 function rowToMetric(row) {
-  return {
-    id: row.id,
-    timestamp: row.timestamp,
-    weight: row.weight ?? null,
-    bodyFat: row.body_fat ?? null,
-    notes: row.notes ?? null,
-  };
+  const o = { id: row.id, timestamp: row.timestamp };
+  for (const [k, col] of Object.entries(METRIC_COLS)) o[k] = row[col] ?? null;
+  return o;
 }
 
 function metricToRow(userId, entry) {
-  return {
-    id: entry.id,
-    user_id: userId,
-    timestamp: entry.timestamp,
-    weight: entry.weight ?? null,
-    body_fat: entry.bodyFat ?? null,
-    notes: entry.notes ?? null,
-  };
+  const row = { id: entry.id, user_id: userId, timestamp: entry.timestamp };
+  for (const [k, col] of Object.entries(METRIC_COLS)) row[col] = entry[k] ?? null;
+  return row;
 }
 
 export async function getBodyMetrics(userId) {
@@ -305,9 +311,9 @@ export async function saveBodyMetric(userId, entry) {
 
 export async function updateBodyMetric(userId, id, updates) {
   const row = {};
-  if (updates.weight !== undefined) row.weight = updates.weight;
-  if (updates.bodyFat !== undefined) row.body_fat = updates.bodyFat;
-  if (updates.notes !== undefined) row.notes = updates.notes;
+  for (const [k, col] of Object.entries(METRIC_COLS)) {
+    if (updates[k] !== undefined) row[col] = updates[k];
+  }
   if (updates.timestamp !== undefined) row.timestamp = updates.timestamp;
   const { error } = await supabase.from('body_metrics').update(row).eq('id', id).eq('user_id', userId);
   if (error) throw error;

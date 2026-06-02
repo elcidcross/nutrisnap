@@ -78,7 +78,7 @@ export default function LogApp({ config, user, active, apps, activeApp, onSwitch
 
   const openAdd = () => {
     const draft = { when: toLocalInput(Date.now()) };
-    fields.forEach(f => { draft[f.key] = ''; });
+    fields.forEach(f => { draft[f.key] = f.default ?? ''; });
     setSheet({ draft });
   };
 
