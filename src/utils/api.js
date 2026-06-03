@@ -132,6 +132,8 @@ const SCHEMA_BLOCK = `Respond with ONLY a raw JSON object — no markdown, no ex
   ],
   "amount": <total weight in grams>,
   "unit": "g",
+  "servingUnit": "<natural counting unit if this food is normally eaten as discrete pieces (e.g. 'slice' for bread, 'egg', 'cookie', 'piece', 'cup'), otherwise null>",
+  "servingGrams": <approximate weight in grams of ONE servingUnit, or null if servingUnit is null>,
   "calories": <total kcal>,
   "protein": <total g>,
   "carbs": <total g>,
@@ -141,7 +143,9 @@ const SCHEMA_BLOCK = `Respond with ONLY a raw JSON object — no markdown, no ex
 
 const RULES = `Identify EVERY visible component — rice, protein, vegetables, sauces, oils, dressings, cooking fats, garnishes. Do NOT collapse the meal to just its dominant item. Estimate each component's portion in grams, then sum macronutrients across all components.
 
-Be generous with sauces, oils, butter, dressings, and cooking fats — they often dominate calories and are easy to underestimate visually.`;
+Be generous with sauces, oils, butter, dressings, and cooking fats — they often dominate calories and are easy to underestimate visually.
+
+For "amount" always give the TOTAL weight in grams. Additionally, if the food is one people naturally count in discrete pieces rather than weigh (bread → slices, eggs → eggs, cookies, pizza slices, etc.), set "servingUnit" to that unit and "servingGrams" to the typical weight of one piece; otherwise set both to null.`;
 
 // Build messages with assistant prefill of `{` so Anthropic models start with raw JSON.
 // The prefill is prepended to the response by the proxy before returning.

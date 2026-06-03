@@ -179,6 +179,8 @@ export async function getFoodLibrary(userId) {
     carbs: row.carbs,
     fat: row.fat,
     fiber: row.fiber,
+    unitLabel: row.unit_label || null,
+    unitGrams: row.unit_grams ?? null,
   }));
 }
 
@@ -201,6 +203,8 @@ export async function saveFoodToLibrary(userId, entry) {
     carbs: entry.carbs,
     fat: entry.fat,
     fiber: entry.fiber || 0,
+    unit_label: entry.unitLabel || null,
+    unit_grams: entry.unitGrams ?? null,
   };
   const { error } = existing
     ? await supabase.from('food_library').update(row).eq('id', existing.id)
@@ -209,13 +213,19 @@ export async function saveFoodToLibrary(userId, entry) {
 }
 
 export async function updateFoodInLibrary(userId, name, macros) {
-  const { error } = await supabase.from('food_library').update({
+  const row = {
     calories: macros.calories,
     protein: macros.protein,
     carbs: macros.carbs,
     fat: macros.fat,
     fiber: macros.fiber || 0,
-  }).eq('user_id', userId).ilike('name', name);
+  };
+  // The macros passed here are always per-100g, so keep the food's reference
+  // basis in sync. Unit info is optional — only written when the caller has it.
+  if (macros.unitLabel !== undefined) row.unit_label = macros.unitLabel || null;
+  if (macros.unitGrams !== undefined) row.unit_grams = macros.unitGrams ?? null;
+  const { error } = await supabase.from('food_library').update(row)
+    .eq('user_id', userId).ilike('name', name);
   if (error) throw error;
 }
 

@@ -8,6 +8,9 @@ const COLORS = { cal: '#1d9e75', protein: '#d4537e', carbs: '#378add', fat: '#ba
 // draft of the review screen to localStorage so it can be restored on remount.
 const DRAFT_KEY = 'nutrisnap_snap_draft';
 const DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// Bumped to 2 when the review model switched from (refAmount/refUnit + refMacros)
+// to (per-100g macros + a unit lens). Older drafts are silently dropped.
+const DRAFT_VERSION = 2;
 
 function saveDraft(obj) {
   try { localStorage.setItem(DRAFT_KEY, JSON.stringify(obj)); } catch { /* quota / private mode */ }
@@ -20,7 +23,7 @@ function loadDraft() {
     const raw = localStorage.getItem(DRAFT_KEY);
     if (!raw) return null;
     const d = JSON.parse(raw);
-    if (d && d.v === 1 && Date.now() - d.savedAt < DRAFT_MAX_AGE_MS) return d;
+    if (d && d.v === DRAFT_VERSION && Date.now() - d.savedAt < DRAFT_MAX_AGE_MS) return d;
   } catch { /* corrupt */ }
   clearDraft();
   return null;
@@ -28,16 +31,21 @@ function loadDraft() {
 
 function r1(n) { return Math.round(n * 10) / 10; }
 
-function calcMacros(amount, refAmount, refMacros) {
-  const ratio = refAmount > 0 ? amount / refAmount : 0;
+// Scale per-100g macros to an arbitrary gram amount. `per100` is kept as the
+// single source of truth (unrounded floats); everything shown to the user —
+// the per-unit card and the totals — is derived from it on the fly.
+function scaleFromPer100(grams, per100) {
+  const ratio = grams / 100;
   return {
-    calories: Math.round(ratio * (refMacros.calories || 0)),
-    protein:  r1(ratio * (refMacros.protein || 0)),
-    carbs:    r1(ratio * (refMacros.carbs || 0)),
-    fat:      r1(ratio * (refMacros.fat || 0)),
-    fiber:    r1(ratio * (refMacros.fiber || 0)),
+    calories: Math.round(ratio * (per100.calories || 0)),
+    protein:  r1(ratio * (per100.protein || 0)),
+    carbs:    r1(ratio * (per100.carbs || 0)),
+    fat:      r1(ratio * (per100.fat || 0)),
+    fiber:    r1(ratio * (per100.fiber || 0)),
   };
 }
+
+const EMPTY_PER100 = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
 
 export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, foodLibrary = [] }) {
   const [state, setState] = useState('idle');
@@ -45,11 +53,11 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   const [imgThumb, setImgThumb] = useState(null);
   const [imgB64, setImgB64] = useState(null);
   const [mealName, setMealName] = useState('');
-  const [amount, setAmount] = useState(0);
-  const [amountUnit, setAmountUnit] = useState('g');
-  const [refAmount, setRefAmount] = useState(100);
-  const [refUnit, setRefUnit] = useState('g');
-  const [refMacros, setRefMacros] = useState({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+  const [amount, setAmount] = useState(0);          // count in the active unit (grams or pieces)
+  const [unitMode, setUnitMode] = useState('g');    // 'g' | 'piece'
+  const [unitLabel, setUnitLabel] = useState('');   // natural piece name, e.g. 'slice'
+  const [unitGrams, setUnitGrams] = useState(0);    // grams in one piece
+  const [per100, setPer100] = useState(EMPTY_PER100); // source of truth (per 100 g, floats)
   const [components, setComponents] = useState([]);
   const [libraryDirty, setLibraryDirty] = useState(false);
   const [err, setErr] = useState(null);
@@ -73,21 +81,33 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   }, [textInput, foodLibrary]);
   const showDropdown = dropdownOpen && suggestions.length > 0;
 
-  const selectSuggestion = (food) => {
+  // Map a saved food_library row onto the review state. New rows store macros
+  // per-100g (refUnit 'g') plus an optional natural unit (unitLabel/unitGrams);
+  // legacy non-gram rows store macros per-1-unit, which we best-effort convert.
+  const applyFood = (food) => {
     const ra = food.refAmount || 100;
     const ru = food.refUnit || 'g';
+    const m = {
+      calories: food.calories || 0, protein: food.protein || 0,
+      carbs: food.carbs || 0, fat: food.fat || 0, fiber: food.fiber || 0,
+    };
+    const label = food.unitLabel || (ru !== 'g' ? ru : '');
+    const grams = +food.unitGrams || (ru !== 'g' ? 100 : 0); // legacy: assume 100g basis
+    const basis = ru === 'g' ? ra : grams; // grams that `m` represents
+    const p100 = {
+      calories: basis > 0 ? m.calories * 100 / basis : 0,
+      protein:  basis > 0 ? m.protein  * 100 / basis : 0,
+      carbs:    basis > 0 ? m.carbs    * 100 / basis : 0,
+      fat:      basis > 0 ? m.fat      * 100 / basis : 0,
+      fiber:    basis > 0 ? m.fiber    * 100 / basis : 0,
+    };
+    const piece = !!label && grams > 0;
     setMealName(food.name);
-    setRefAmount(ra);
-    setRefUnit(ru);
-    setRefMacros({
-      calories: food.calories || 0,
-      protein: food.protein || 0,
-      carbs: food.carbs || 0,
-      fat: food.fat || 0,
-      fiber: food.fiber || 0,
-    });
-    setAmount(ra);
-    setAmountUnit(ru);
+    setPer100(p100);
+    setUnitLabel(label);
+    setUnitGrams(grams);
+    setUnitMode(piece ? 'piece' : 'g');
+    setAmount(piece ? 1 : (ru === 'g' ? ra : 100));
     setComponents([]);
     setModelUsed(null);
     setLibraryDirty(false);
@@ -124,14 +144,65 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
       }
       if (e.key === 'Enter' && highlightIdx >= 0 && highlightIdx < suggestions.length) {
         e.preventDefault();
-        selectSuggestion(suggestions[highlightIdx]);
+        applyFood(suggestions[highlightIdx]);
         return;
       }
     }
     if (e.key === 'Enter') analyzeText();
   };
 
-  const macros = calcMacros(amount, refAmount, refMacros);
+  // Everything below is derived from per100 + the active unit.
+  const isPiece = unitMode === 'piece';
+  const cardGrams = isPiece ? (+unitGrams || 0) : 100;           // grams the per-unit card represents
+  const totalGrams = isPiece ? (+amount || 0) * (+unitGrams || 0) : (+amount || 0);
+  const cardMacros = scaleFromPer100(cardGrams, per100);         // per 1 piece / per 100 g
+  const macros = scaleFromPer100(totalGrams, per100);            // totals for the logged amount
+
+  // Per-100g for persistence (rounded once, at the edges).
+  const per100Rounded = () => ({
+    calories: Math.round(per100.calories || 0),
+    protein:  r1(per100.protein || 0),
+    carbs:    r1(per100.carbs || 0),
+    fat:      r1(per100.fat || 0),
+    fiber:    r1(per100.fiber || 0),
+  });
+
+  // Edit a per-unit card field → write back into the per-100g source of truth.
+  const editCardMacro = (key, value) => {
+    const v = +value || 0;
+    setPer100(p => ({ ...p, [key]: cardGrams > 0 ? v * 100 / cardGrams : 0 }));
+    setLibraryDirty(true);
+  };
+
+  // Switch the working unit while keeping the logged total weight constant.
+  const useGrams = () => {
+    if (!isPiece) return;
+    setAmount(r1(totalGrams));
+    setUnitMode('g');
+  };
+  const usePieces = () => {
+    if (isPiece) return;
+    let label = unitLabel || 'piece';
+    let g = +unitGrams || 0;
+    if (g <= 0) { g = Math.max(1, Math.round(totalGrams)) || 50; setLibraryDirty(true); }
+    if (!unitLabel) { label = 'piece'; setLibraryDirty(true); }
+    setUnitLabel(label);
+    setUnitGrams(g);
+    setAmount(r1(g > 0 ? totalGrams / g : 1));
+    setUnitMode('piece');
+  };
+
+  // Editing the piece weight keeps the per-100g density (and the piece count)
+  // fixed, so the per-piece macros and totals rescale automatically.
+  const changeUnitGrams = (value) => {
+    setUnitGrams(value === '' ? '' : +value);
+    setLibraryDirty(true);
+  };
+
+  const changeUnitLabel = (value) => {
+    setUnitLabel(value);
+    setLibraryDirty(true);
+  };
 
   // Restore a previously reviewed analysis after a reload (e.g. iPhone lock).
   useEffect(() => {
@@ -140,10 +211,10 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
     setImgThumb(d.imgThumb || null);
     setMealName(d.mealName || '');
     setAmount(d.amount ?? 0);
-    setAmountUnit(d.amountUnit || 'g');
-    setRefAmount(d.refAmount ?? 100);
-    setRefUnit(d.refUnit || 'g');
-    setRefMacros(d.refMacros || { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+    setUnitMode(d.unitMode || 'g');
+    setUnitLabel(d.unitLabel || '');
+    setUnitGrams(d.unitGrams ?? 0);
+    setPer100(d.per100 || EMPTY_PER100);
     setComponents(Array.isArray(d.components) ? d.components : []);
     setModelUsed(d.modelUsed || null);
     setLibraryDirty(!!d.libraryDirty);
@@ -156,13 +227,13 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   useEffect(() => {
     if (state === 'review') {
       saveDraft({
-        v: 1, savedAt: Date.now(), imgThumb, mealName, amount, amountUnit,
-        refAmount, refUnit, refMacros, components, modelUsed, libraryDirty,
+        v: DRAFT_VERSION, savedAt: Date.now(), imgThumb, mealName, amount,
+        unitMode, unitLabel, unitGrams, per100, components, modelUsed, libraryDirty,
       });
     } else {
       clearDraft();
     }
-  }, [state, imgThumb, mealName, amount, amountUnit, refAmount, refUnit, refMacros, components, modelUsed, libraryDirty]);
+  }, [state, imgThumb, mealName, amount, unitMode, unitLabel, unitGrams, per100, components, modelUsed, libraryDirty]);
 
   // Re-encode the image as JPEG at a bounded max dimension. The analysis-grade
   // size (1600px / q0.85) keeps the request body well under Vercel's 4.5 MB
@@ -209,8 +280,7 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
     try {
       const a = await analyzeFn();
       const name = a.name || 'Meal';
-      const amt = a.amount || 0;
-      const unit = a.unit || 'g';
+      const grams = a.amount || 0; // AI always returns total weight in grams
       const totals = {
         calories: a.calories || 0,
         protein: a.protein || 0,
@@ -218,27 +288,35 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
         fat: a.fat || 0,
         fiber: a.fiber || 0,
       };
-      // Convert totals → per-100g (or per-1 unit if non-gram) for the editable card.
-      const refAmt = unit === 'g' ? 100 : 1;
-      const ratio = amt > 0 ? refAmt / amt : 0;
-      const rm = {
-        calories: Math.round(totals.calories * ratio),
-        protein:  r1(totals.protein  * ratio),
-        carbs:    r1(totals.carbs    * ratio),
-        fat:      r1(totals.fat      * ratio),
-        fiber:    r1(totals.fiber    * ratio),
+      // Per-100g density is the source of truth; everything else derives from it.
+      const ratio = grams > 0 ? 100 / grams : 0;
+      const p100 = {
+        calories: totals.calories * ratio,
+        protein:  totals.protein  * ratio,
+        carbs:    totals.carbs    * ratio,
+        fat:      totals.fat      * ratio,
+        fiber:    totals.fiber    * ratio,
       };
+      // If the AI named a natural counting unit, default the review to it.
+      const su = (a.servingUnit && String(a.servingUnit).trim()) || '';
+      const sg = +a.servingGrams || 0;
+      const piece = !!su && sg > 0;
       setMealName(name);
-      setAmount(amt);
-      setAmountUnit(unit);
-      setRefAmount(refAmt);
-      setRefUnit(unit);
-      setRefMacros(rm);
+      setPer100(p100);
+      setUnitLabel(su);
+      setUnitGrams(piece ? sg : 0);
+      setUnitMode(piece ? 'piece' : 'g');
+      setAmount(piece ? r1(grams / sg) : grams);
       setComponents(Array.isArray(a.components) ? a.components : []);
       setModelUsed(a._modelUsed || null);
       setLibraryDirty(false);
       setRestored(false);
-      onSaveToLibrary({ name, refAmount: refAmt, refUnit: unit, ...rm });
+      onSaveToLibrary({
+        name, refAmount: 100, refUnit: 'g',
+        calories: Math.round(p100.calories), protein: r1(p100.protein),
+        carbs: r1(p100.carbs), fat: r1(p100.fat), fiber: r1(p100.fiber),
+        unitLabel: piece ? su : null, unitGrams: piece ? sg : null,
+      });
       setState('review');
       return true;
     } catch (e) {
@@ -259,19 +337,24 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   };
 
   const confirm = () => {
+    // Always persist the log in grams — the unit was only an input convenience.
     onSaved({
       id: Date.now().toString(36) + Math.random().toString(36).slice(2),
       timestamp: Date.now(),
       name: mealName,
       imageUrl: imgThumb || imgUrl,
       model: modelUsed,
-      amount: +amount || 0,
-      unit: amountUnit,
-      refAmount,
-      refUnit,
+      amount: r1(totalGrams),
+      unit: 'g',
+      refAmount: 100,
+      refUnit: 'g',
       ...macros,
     });
-    if (libraryDirty) onUpdateLibrary(mealName, refMacros);
+    if (libraryDirty) onUpdateLibrary(mealName, {
+      ...per100Rounded(),
+      unitLabel: unitLabel || null,
+      unitGrams: (unitLabel && +unitGrams > 0) ? +unitGrams : null,
+    });
     // onSaved switches tabs, which unmounts this component before the persist
     // effect can run — so clear the saved draft explicitly here.
     clearDraft();
@@ -297,8 +380,8 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
 
   const reset = () => {
     setState('idle'); setImgUrl(null); setImgThumb(null); setImgB64(null);
-    setMealName(''); setAmount(0); setAmountUnit('g'); setRefAmount(100); setRefUnit('g');
-    setRefMacros({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 });
+    setMealName(''); setAmount(0); setUnitMode('g'); setUnitLabel(''); setUnitGrams(0);
+    setPer100(EMPTY_PER100);
     setComponents([]);
     setLibraryDirty(false); setErr(null); setTextInput(''); setModelUsed(null);
     setRestored(false);
@@ -355,7 +438,7 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
                   key={f.name}
                   role="option"
                   aria-selected={highlighted}
-                  onMouseDown={e => { e.preventDefault(); selectSuggestion(f); }}
+                  onMouseDown={e => { e.preventDefault(); applyFood(f); }}
                   onMouseEnter={() => setHighlightIdx(i)}
                   style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -374,7 +457,9 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
                     )}
                   </span>
                   <span style={{ color: '#888', fontSize: 12, flexShrink: 0 }}>
-                    {Math.round(f.calories || 0)} cal / {f.refAmount}{f.refUnit}
+                    {f.unitLabel && f.unitGrams
+                      ? `${Math.round((f.calories || 0) * f.unitGrams / 100)} cal / ${f.unitLabel}`
+                      : `${Math.round(f.calories || 0)} cal / ${f.refAmount}${f.refUnit}`}
                   </span>
                 </li>
               );
@@ -430,6 +515,7 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   );
 
   // Review screen
+  const pieceName = unitLabel || 'piece';
   return (
     <div style={s}>
       {(imgUrl || imgThumb) && <img src={imgUrl || imgThumb} alt="Food" style={{ width: '100%', borderRadius: 14, marginBottom: 16, maxHeight: 240, objectFit: 'cover' }} />}
@@ -470,23 +556,50 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
         </div>
       )}
 
-      {/* Amount */}
+      {/* Amount + unit toggle */}
       <div style={{ background: '#f5f5f0', borderRadius: 12, padding: '12px 14px', marginBottom: 12, border: '0.5px solid rgba(0,0,0,.07)' }}>
-        <div style={{ fontSize: 11, color: '#888', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Amount</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+          <div style={{ fontSize: 11, color: '#888', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>Amount</div>
+          {/* Toggle between grams and a natural counting unit */}
+          <div style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid rgba(0,0,0,.12)' }}>
+            <UnitTab active={!isPiece} onClick={useGrams}>grams</UnitTab>
+            <UnitTab active={isPiece} onClick={usePieces}>{pieceName}{!isPiece ? 's' : ''}</UnitTab>
+          </div>
+        </div>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
           <input
-            type="number" value={amount} min={0} step={0.1}
+            type="number" value={amount} min={0} step={isPiece ? 1 : 0.1}
             onChange={e => setAmount(e.target.value === '' ? '' : +e.target.value)}
             style={{ fontSize: 28, fontWeight: 700, border: 'none', background: 'transparent', color: 'inherit', outline: 'none', width: 100 }}
           />
-          <span style={{ fontSize: 16, color: '#888', fontWeight: 600 }}>{amountUnit}</span>
+          {isPiece ? (
+            <input
+              value={unitLabel}
+              onChange={e => changeUnitLabel(e.target.value)}
+              placeholder="unit"
+              style={{ fontSize: 16, color: '#666', fontWeight: 600, border: 'none', borderBottom: '1.5px dashed rgba(0,0,0,.2)', background: 'transparent', outline: 'none', width: 90, padding: '0 0 2px' }}
+            />
+          ) : (
+            <span style={{ fontSize: 16, color: '#888', fontWeight: 600 }}>g</span>
+          )}
         </div>
+        {isPiece && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10, fontSize: 13, color: '#888' }}>
+            <span>1 {pieceName} ≈</span>
+            <input
+              type="number" value={unitGrams} min={0} step={1}
+              onChange={e => changeUnitGrams(e.target.value)}
+              style={{ fontSize: 14, fontWeight: 700, border: 'none', borderBottom: '1.5px solid #888', background: 'transparent', color: 'inherit', outline: 'none', width: 54, textAlign: 'right' }}
+            />
+            <span>g</span>
+          </div>
+        )}
       </div>
 
       {/* Per-unit macros */}
       <div style={{ background: '#f5f5f0', borderRadius: 12, padding: '12px 14px', marginBottom: 16, border: '0.5px solid rgba(0,0,0,.07)' }}>
         <div style={{ fontSize: 11, color: '#888', marginBottom: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>
-          Per {refAmount} {refUnit}
+          {isPiece ? `Per 1 ${pieceName}` : 'Per 100 g'}
           <span style={{ fontSize: 10, color: '#bbb', fontWeight: 400, marginLeft: 6 }}>(edit to correct)</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
@@ -502,8 +615,8 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
                 <input
-                  type="number" value={refMacros[k]} min={0} step={0.1}
-                  onChange={e => { setRefMacros(p => ({ ...p, [k]: +e.target.value })); setLibraryDirty(true); }}
+                  type="number" value={cardMacros[k]} min={0} step={0.1}
+                  onChange={e => editCardMacro(k, e.target.value)}
                   style={{ fontSize: 15, fontWeight: 700, border: 'none', background: 'transparent', color, outline: 'none', width: '100%' }}
                 />
                 <span style={{ fontSize: 10, color: '#aaa' }}>{unit}</span>
@@ -516,7 +629,9 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
       {/* Calculated totals (read-only) */}
       <div style={{ marginBottom: 20 }}>
         <div style={{ fontSize: 11, color: '#888', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.4px' }}>
-          Total for {amount} {amountUnit}
+          {isPiece
+            ? <>Total for {amount} {pieceName}{(+amount === 1) ? '' : 's'} ({r1(totalGrams)} g)</>
+            : <>Total for {amount} g</>}
         </div>
         <div style={{ background: '#e1f5ee', borderRadius: 12, padding: 14, border: '0.5px solid rgba(29,158,117,.2)' }}>
           <div style={{ fontSize: 28, fontWeight: 800, color: COLORS.cal, marginBottom: 6 }}>{macros.calories} <span style={{ fontSize: 14, fontWeight: 600 }}>kcal</span></div>
@@ -533,6 +648,17 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
       <Btn primary onClick={confirm}><i className="ti ti-check" />Save to log</Btn>
       <Btn onClick={reset} style={{ marginTop: 10 }}>Discard</Btn>
     </div>
+  );
+}
+
+function UnitTab({ active, onClick, children }) {
+  return (
+    <button onClick={onClick} style={{
+      padding: '5px 12px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
+      background: active ? '#1d9e75' : '#fff', color: active ? '#fff' : '#888',
+    }}>
+      {children}
+    </button>
   );
 }
 

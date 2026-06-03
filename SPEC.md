@@ -140,11 +140,15 @@ nudge_enabled   bool
 id              uuid primary key
 user_id         uuid
 name            text
-ref_amount      numeric
-ref_unit        text
-calories, protein, carbs, fat, fiber  numeric
+ref_amount      numeric        -- always 100 for new rows (macros are per-100g)
+ref_unit        text           -- always 'g' for new rows
+calories, protein, carbs, fat, fiber  numeric  -- per ref_amount ref_unit (i.e. per 100 g)
+unit_label      text           -- natural counting unit, e.g. 'slice' (NULL = weigh only)
+unit_grams      numeric        -- approx grams in one unit_label (e.g. 30 for a slice)
 created_at      timestamptz default now()
 ```
+
+`unit_label`/`unit_grams` (migration `sql/food_library_units.sql`) let a food remember the unit it's naturally counted in. Macros are always stored per-100g; the natural unit is purely an input/display convenience used by the Snap review screen.
 
 Indexed for case-insensitive uniqueness via `create unique index on food_library(user_id, lower(name))`. Because the index is functional, `supabase.upsert(..., { onConflict: ... })` cannot reference it; `saveFoodToLibrary` does a select-then-insert/update against `ilike` instead.
 
@@ -188,9 +192,11 @@ Indexed for case-insensitive uniqueness via `create unique index on food_library
 **Review screen**
 - Editable meal name
 - Read-only "Components" card listing every item the AI identified (e.g. `rice (200 g) · chicken thigh (130 g) · broccoli (90 g)`) — gives the user transparency into the breakdown that produced the totals
-- Editable amount with unit label — changing it recalculates total macros live
-- Per-unit macros card labelled "Per {refAmount} {refUnit}" (typically "Per 100 g") with 4 editable fields (calories, protein, carbs, fat); edits here update the user's `food_library` entry on save. Fiber is intentionally not shown or editable on this screen, but the AI's fiber estimate is still scaled by amount and saved to the log (and so still appears in the Log/Reports)
-- Read-only totals card: "Total for {amount} {unit}" with calories, protein, carbs, fat
+- Editable amount with a **unit toggle** (`grams` ⇄ a natural counting unit). The AI picks the most appropriate unit for the food (e.g. bread → `slice`, eggs → `egg`); when it returns a `servingUnit`/`servingGrams` the review screen defaults to that unit. The user can switch units at any time — toggling keeps the logged total weight constant. Changing the amount recalculates total macros live.
+- When a counting unit is active: the amount is in that unit (e.g. "2 slices"), the unit name is editable inline, and an editable **"1 {unit} ≈ N g"** field sets the piece weight. Internally macros are kept per-100g (the nutritional source of truth); the per-unit card and totals derive from it, so editing the piece weight rescales the per-piece macros and totals while the per-100g density stays fixed.
+- Per-unit macros card labelled "Per 100 g" (grams mode) or "Per 1 {unit}" (counting mode) with 4 editable fields (calories, protein, carbs, fat); edits here update the user's `food_library` entry (always stored per-100g) on save, along with the food's `unit_label`/`unit_grams`. Fiber is intentionally not shown or editable on this screen, but the AI's fiber estimate is still scaled by amount and saved to the log (and so still appears in the Log/Reports)
+- Read-only totals card: "Total for {amount} {unit}" (counting mode also shows the equivalent grams) with calories, protein, carbs, fat
+- **Logs are always saved in grams.** A counting-unit entry (e.g. 2 slices @ 30 g) is converted to its gram total (60 g) on save, so the log/history and edit screens stay uniformly gram-based
 - AI model used shown next to the "AI estimate" badge
 - Save to log / Discard
 - **Crash/lock recovery:** while on this screen the analysis (name, amount, per-unit macros, components, model, thumbnail) is mirrored to `localStorage` under `nutrisnap_snap_draft`, including every inline edit. If the page is reloaded or evicted before saving — e.g. iOS Safari discarding the tab when the phone locks — the draft is restored on next mount with a "Restored your last analysis" badge. The draft is cleared on Save to log or Discard, and ignored if older than 24h. The full-resolution photo is not stored (only the small thumbnail), so a lock *during* the analyzing spinner is not recovered — the user re-takes the photo.
