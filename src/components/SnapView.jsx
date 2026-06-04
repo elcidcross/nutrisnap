@@ -66,6 +66,7 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   const [restored, setRestored] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [macroDraft, setMacroDraft] = useState(null); // { key, text } for the per-unit card field being edited
 
   const suggestions = useMemo(() => {
     const q = textInput.trim().toLowerCase();
@@ -168,7 +169,12 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
   });
 
   // Edit a per-unit card field → write back into the per-100g source of truth.
+  // The raw typed text is mirrored to `macroDraft` so the input shows exactly
+  // what was typed while editing (otherwise React's loose number-input compare
+  // leaves a stuck leading zero after clearing-then-typing). It's cleared on
+  // blur, so the display reverts to the rounded derived value.
   const editCardMacro = (key, value) => {
+    setMacroDraft({ key, text: value });
     const v = +value || 0;
     setPer100(p => ({ ...p, [key]: cardGrams > 0 ? v * 100 / cardGrams : 0 }));
     setLibraryDirty(true);
@@ -615,8 +621,10 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
                 <input
-                  type="number" value={cardMacros[k]} min={0} step={0.1}
+                  type="number" min={0} step={0.1}
+                  value={macroDraft && macroDraft.key === k ? macroDraft.text : cardMacros[k]}
                   onChange={e => editCardMacro(k, e.target.value)}
+                  onBlur={() => setMacroDraft(null)}
                   style={{ fontSize: 15, fontWeight: 700, border: 'none', background: 'transparent', color, outline: 'none', width: '100%' }}
                 />
                 <span style={{ fontSize: 10, color: '#aaa' }}>{unit}</span>
