@@ -47,7 +47,7 @@ function scaleFromPer100(grams, per100) {
 
 const EMPTY_PER100 = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
 
-export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, foodLibrary = [] }) {
+export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, foodLibrary = [], logs = [] }) {
   const [state, setState] = useState('idle');
   const [imgUrl, setImgUrl] = useState(null);
   const [imgThumb, setImgThumb] = useState(null);
@@ -103,12 +103,19 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
       fiber:    basis > 0 ? m.fiber    * 100 / basis : 0,
     };
     const piece = !!label && grams > 0;
+    // Default the quantity to the most recent log of this meal (always stored
+    // in grams), falling back to the food's reference amount / 1 piece.
+    const recentGrams = logs
+      .filter(l => l.unit === 'g' && +l.amount > 0 && (l.name || '').toLowerCase() === (food.name || '').toLowerCase())
+      .sort((a, b) => b.timestamp - a.timestamp)[0]?.amount || 0;
     setMealName(food.name);
     setPer100(p100);
     setUnitLabel(label);
     setUnitGrams(grams);
     setUnitMode(piece ? 'piece' : 'g');
-    setAmount(piece ? 1 : (ru === 'g' ? ra : 100));
+    setAmount(piece
+      ? (recentGrams > 0 ? r1(recentGrams / grams) : 1)
+      : (recentGrams > 0 ? r1(recentGrams) : (ru === 'g' ? ra : 100)));
     setComponents([]);
     setModelUsed(null);
     setLibraryDirty(false);

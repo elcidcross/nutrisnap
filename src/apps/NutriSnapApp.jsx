@@ -187,7 +187,7 @@ export default function NutriSnapApp({ user, active, apps, activeApp, onSwitch }
       title={TITLES[tab]} subtitle={SUBS[tab]} headerRight={headerRight}
       tabs={TABS} activeTab={tab} onTabChange={setTab}>
       {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={handleDeleteLog} onEdit={handleEditLog} onRelog={handleRelog} />}
-      {tab === 'snap' && <SnapView foodLibrary={foodLibrary} onSaved={entry => { handleAddLog(entry); setTab('log'); }} onSaveToLibrary={handleSaveToLibrary} onUpdateLibrary={handleUpdateLibrary} />}
+      {tab === 'snap' && <SnapView foodLibrary={foodLibrary} logs={logs} onSaved={entry => { handleAddLog(entry); setTab('log'); }} onSaveToLibrary={handleSaveToLibrary} onUpdateLibrary={handleUpdateLibrary} />}
       {tab === 'report' && <ReportView logs={logs} goalsHistory={goalsHistory} />}
       {tab === 'settings' && (
         <SettingsView
