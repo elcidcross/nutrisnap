@@ -40,6 +40,110 @@ const RELEASE_NOTES = [
       'Goals and Reports are now tailored per activity, so each part of the app tracks against the targets that make sense for it.',
     ],
   },
+  {
+    version: '1.4.15',
+    date: '2026-06-02 21:17 JST',
+    notes: [
+      'The Body tracker now records full smart-scale readings — body fat, muscle, water and more — for a complete composition picture, not just weight.',
+    ],
+  },
+  {
+    version: '1.4.14',
+    date: '2026-06-02 11:49 JST',
+    notes: [
+      'Meal analysis now retries automatically when your connection drops for a moment, instead of giving up on the first hiccup.',
+    ],
+  },
+  {
+    version: '1.4.13',
+    date: '2026-06-02 09:31 JST',
+    notes: [
+      'NutriSnap grew into a wellness hub: tap the title at the top to switch between Nutrition, Body, Workouts, Jogging and more — all sharing one app and one login.',
+    ],
+  },
+  {
+    version: '1.4.11',
+    date: '2026-06-01 00:09 JST',
+    notes: [
+      'As you type a meal name, NutriSnap suggests foods you’ve logged before — so your regulars are a tap to fill in.',
+    ],
+  },
+  {
+    version: '1.4.10',
+    date: '2026-05-31 23:36 JST',
+    notes: [
+      'Meal photos are now shrunk on your phone before uploading. Large photos no longer fail with an error, and uploads are noticeably faster.',
+    ],
+  },
+  {
+    version: '1.4.9',
+    date: '2026-05-31 23:23 JST',
+    notes: [
+      'Reports now open to the Week view by default — a more useful overview than a single day.',
+    ],
+  },
+  {
+    version: '1.4.8',
+    date: '2026-05-31 22:56 JST',
+    notes: [
+      'Report charts now label real days and dates (Sun–Sat, 1–31), making your weekly and monthly trends much easier to read.',
+    ],
+  },
+  {
+    version: '1.4.5',
+    date: '2026-05-28 21:45 JST',
+    notes: [
+      'Re-logging is simpler: every entry in your log now has a quick re-add button, replacing the separate Recents list.',
+    ],
+  },
+  {
+    version: '1.4.4',
+    date: '2026-05-28 20:58 JST',
+    notes: [
+      'In a hurry? Snap a meal and save the photo to analyze later, instead of waiting for the AI right then and there.',
+    ],
+  },
+  {
+    version: '1.4.1',
+    date: '2026-05-26 21:53 JST',
+    notes: [
+      'The app stays quick to open even as your history grows — meal thumbnails now load in the background after the list appears.',
+    ],
+  },
+  {
+    version: '1.4.0',
+    date: '2026-05-26 21:29 JST',
+    notes: [
+      'Your in-progress meal review now survives an accidental phone lock or page reload — pick up right where you left off.',
+    ],
+  },
+  {
+    version: '1.3.0',
+    date: '2026-05-26 01:40 JST',
+    notes: [
+      'Reports show all four nutrition charts — calories, protein, carbs and fat — at once.',
+      'Step through earlier periods with previous/next arrows on the Report view.',
+    ],
+  },
+  {
+    version: '1.2.0',
+    date: '2026-05-26 01:16 JST',
+    notes: [
+      'Tap a logged meal’s photo to view it full-screen.',
+      'A confirmation step now guards against deleting a log entry by accident.',
+      'Snap shows your last few days of meals for quick re-logging, and each report bubble shows that period’s target.',
+    ],
+  },
+  {
+    version: '1.1.1',
+    date: '2026-05-22 01:20 JST',
+    notes: [
+      'The first NutriSnap release: snap a photo of a meal and get an AI estimate of its calories and macros.',
+      'Bring your own AI key and pick your provider — Claude, OpenAI or Gemini — in Settings.',
+      'Type meals by name or choose from your gallery, edit any logged meal, and export or import your history as CSV.',
+      'Goals are tracked over time, so past days always compare against the targets you had back then.',
+    ],
+  },
 ];
 
 export default RELEASE_NOTES;
