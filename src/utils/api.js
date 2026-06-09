@@ -66,27 +66,32 @@ function getModel() {
 }
 
 // Extract the first complete JSON object from a string using balanced brackets.
-// If the JSON is truncated (depth > 0 at end), attempts repair by closing
-// open structures at the last valid comma/colon boundary.
+// Tracks both `{}` and `[]` on a stack so nesting through arrays (e.g. the
+// `components` array) is counted correctly. If the JSON is truncated (stack
+// not empty at end), attempts repair by trimming at the last complete-value
+// boundary and closing every still-open bracket in the right order.
 function extractJson(str, allowRepair = false) {
   const start = str.indexOf('{');
   if (start === -1) return null;
-  let depth = 0, inStr = false, esc = false;
-  let lastCompleteEntry = -1; // position after last `,` at depth 1 (where we could truncate)
+  const stack = []; // open brackets, innermost last: '{' or '['
+  let inStr = false, esc = false;
+  let lastSafe = -1, lastSafeStack = null; // last `,` boundary + the open brackets there
   for (let i = start; i < str.length; i++) {
     const c = str[i];
     if (esc) { esc = false; continue; }
     if (c === '\\' && inStr) { esc = true; continue; }
     if (c === '"') { inStr = !inStr; continue; }
     if (inStr) continue;
-    if (c === '{') depth++;
-    else if (c === '}') { if (--depth === 0) return str.slice(start, i + 1); }
-    else if (c === ',' && depth === 1) lastCompleteEntry = i;
+    if (c === '{' || c === '[') stack.push(c);
+    else if (c === '}' || c === ']') { stack.pop(); if (stack.length === 0) return str.slice(start, i + 1); }
+    else if (c === ',' && stack.length) { lastSafe = i; lastSafeStack = stack.slice(); }
   }
-  if (!allowRepair || depth === 0) return null;
-  // Repair truncated JSON: trim at last complete entry and close remaining depth
-  if (lastCompleteEntry > 0) {
-    return str.slice(start, lastCompleteEntry) + '}'.repeat(depth);
+  if (!allowRepair || stack.length === 0) return null;
+  // Repair truncated JSON: trim at the last complete value and close every
+  // bracket that was open there, innermost first.
+  if (lastSafe > 0 && lastSafeStack) {
+    const closers = lastSafeStack.map(b => (b === '{' ? '}' : ']')).reverse().join('');
+    return str.slice(start, lastSafe) + closers;
   }
   return null;
 }

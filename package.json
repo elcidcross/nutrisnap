@@ -32,7 +32,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "vercel-build": "REACT_APP_BUILD_TIME=$(date -u '+%Y-%m-%d %H:%M UTC') REACT_APP_VERSION=$npm_package_version react-scripts build",
+    "vercel-build": "REACT_APP_BUILD_TIME=$(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST') REACT_APP_VERSION=$npm_package_version react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "e2e": "for f in e2e/*.test.js; do echo \"\\n=== $f ===\"; node \"$f\" || exit 1; done"

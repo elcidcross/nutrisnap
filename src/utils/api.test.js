@@ -42,6 +42,16 @@ describe('parseJson', () => {
     });
   });
 
+  test('repairs a response truncated inside the components array', () => {
+    // Real failure: a multi-component meal cut off mid-array. The repair must
+    // close the open `[` and `{`, not just emit curly braces.
+    const raw = '{ "name": "Basil-scented Gapao Rice with Fried Egg", "components": [ { "name": "Cooked White Rice", "amount": 214, "unit": "g" }, { "name": "Minced Chicken Stir';
+    expect(parseJson(raw)).toEqual({
+      name: 'Basil-scented Gapao Rice with Fried Egg',
+      components: [{ name: 'Cooked White Rice', amount: 214, unit: 'g' }],
+    });
+  });
+
   test('throws on an unparseable response', () => {
     expect(() => parseJson('not json at all')).toThrow(/AI returned unexpected response/);
   });

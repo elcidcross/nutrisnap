@@ -152,7 +152,16 @@ async function callGeminiModel(apiKey, model, body, jsonResponse) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts }],
-        generationConfig: { maxOutputTokens: stripped.max_tokens, ...(jsonResponse && { responseMimeType: 'application/json' }) },
+        // Gemini 2.5/3.x Flash are thinking models: hidden reasoning tokens count
+        // against maxOutputTokens. Left enabled, thinking eats the budget and the
+        // JSON gets truncated mid-response (e.g. cut off inside the components
+        // array → a meal saved with all-zero macros). These are structured
+        // extraction calls that don't need it, so disable thinking outright.
+        generationConfig: {
+          maxOutputTokens: stripped.max_tokens,
+          thinkingConfig: { thinkingBudget: 0 },
+          ...(jsonResponse && { responseMimeType: 'application/json' }),
+        },
       }),
     }
   );

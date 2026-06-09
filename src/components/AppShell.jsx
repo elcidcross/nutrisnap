@@ -1,5 +1,6 @@
 import React from 'react';
 import AppSwitcher from './AppSwitcher';
+import ReleaseNotes from './ReleaseNotes';
 
 // Shared screen chrome for every app: the centered phone-width container, the
 // sticky header (with the app-switcher title), the scrollable content, and either
@@ -29,7 +30,10 @@ export default function AppShell({
           <AppSwitcher title={title} apps={apps} activeApp={activeApp} onSwitch={onSwitch} accent={accent} />
           {subtitle && <div style={{ fontSize: 12, color: '#888', marginTop: 1 }}>{subtitle}</div>}
         </div>
-        {headerRight}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {headerRight}
+          <ReleaseNotes accent={accent} />
+        </div>
       </div>
 
       {/* Content */}
