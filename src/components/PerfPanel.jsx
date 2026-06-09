@@ -16,8 +16,6 @@ const SEGS = [
   { key: 'proxy', label: 'Proxy', color: '#888888' },
 ];
 
-const DAY = 86400000;
-
 function segments(r) {
   const encode = r.encode_ms || 0;
   const network = r.network_ms != null ? Math.max(0, r.network_ms) : 0;
