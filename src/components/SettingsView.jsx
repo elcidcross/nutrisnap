@@ -1,5 +1,6 @@
 import React from 'react';
 import { supabase } from '../utils/supabase';
+import PerfPanel from './PerfPanel';
 
 const KEYS = {
   API_KEY: 'nutrisnap_api_key',
@@ -50,7 +51,7 @@ function parseCSVLine(line) {
   return result;
 }
 
-export default function SettingsView({ goals, notif, goalsHistory, logs, onGoalSave, onNotifChange, onImport }) {
+export default function SettingsView({ goals, notif, goalsHistory, logs, onGoalSave, onNotifChange, onImport, onLoadPerf }) {
   const [importMsg, setImportMsg] = React.useState(null);
 
   const exportCSV = () => {
@@ -249,6 +250,9 @@ export default function SettingsView({ goals, notif, goalsHistory, logs, onGoalS
           </a>
         </div>
       </div>
+
+      {onLoadPerf && <div style={{ height: '0.5px', background: 'rgba(0,0,0,.08)', margin: '20px 0 0' }} />}
+      {onLoadPerf && <PerfPanel onLoadPerf={onLoadPerf} />}
 
       <div style={{ height: '0.5px', background: 'rgba(0,0,0,.08)', margin: '20px 0 0' }} />
 

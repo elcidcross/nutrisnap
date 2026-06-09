@@ -1,4 +1,5 @@
 module.exports = async (req, res) => {
+  const tStart = Date.now();
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -17,9 +18,11 @@ module.exports = async (req, res) => {
   const token = body._supabaseToken;
   if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
+  const tAuth0 = Date.now();
   const authRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
     headers: { 'Authorization': `Bearer ${token}`, 'apikey': supabaseAnonKey },
   }).catch(() => null);
+  const authMs = Date.now() - tAuth0;
   if (!authRes || !authRes.ok) return res.status(401).json({ error: 'Unauthorized' });
   let userId = null;
   try { userId = (await authRes.json())?.id || null; } catch (_) {}
@@ -29,30 +32,45 @@ module.exports = async (req, res) => {
   if (!apiKey) return res.status(400).json({ error: 'No API key configured. Add one in Settings.' });
 
   const { _supabaseToken, _userApiKey, _provider, _jsonResponse, ...aiBody } = body;
+  const reqBytes = Number(req.headers['content-length']) || 0;
+  const region = process.env.VERCEL_REGION || null;
+
+  // Measured by the provider dispatch below; referenced again in the catch so the
+  // failure path can report how long we waited on the upstream before it errored.
+  let upstreamMs = null;
 
   try {
+    const tUp0 = Date.now();
     let result;
     if (provider === 'openai') result = await callOpenAI(apiKey, aiBody, _jsonResponse);
     else if (provider === 'gemini') result = await callGemini(apiKey, aiBody, _jsonResponse);
     else result = await callAnthropic(apiKey, aiBody, _jsonResponse);
+    upstreamMs = Date.now() - tUp0;
     const _modelUsed = result._modelUsed || aiBody.model;
     const { _modelUsed: _, ...clean } = result;
+    const respBytes = clean.content?.map(b => (b.text || '').length).reduce((a, n) => a + n, 0) || 0;
     if (_jsonResponse) {
       const txt = clean.content?.map(b => b.text || '').join('') || '';
       console.log(`[${provider}] JSON response (len=${txt.length}):`, txt.slice(0, 500));
     }
-    return res.status(200).json({ ...clean, _modelUsed });
+    // Server-measured segments, merged into the client's perf_log row. serverMs is
+    // the function's wall time; upstreamMs is the slice spent inside the AI call.
+    const _perf = { serverMs: Date.now() - tStart, authMs, upstreamMs, reqBytes, respBytes, region };
+    console.log(`[perf] provider=${provider} model=${_modelUsed} upstreamMs=${upstreamMs} authMs=${authMs} serverMs=${_perf.serverMs} reqBytes=${reqBytes} respBytes=${respBytes} region=${region}`);
+    return res.status(200).json({ ...clean, _modelUsed, _perf });
   } catch (err) {
     const status = err.status || 500;
+    const serverMs = Date.now() - tStart;
+    console.log(`[perf] provider=${provider} model=${aiBody.model || null} status=${status} upstreamMs=${upstreamMs} authMs=${authMs} serverMs=${serverMs} reqBytes=${reqBytes} region=${region} error="${err.message || 'Unknown error'}"`);
     // Durably record the failure so it survives Vercel's short log retention.
     await logError(supabaseUrl, supabaseAnonKey, token, userId, {
       provider,
       model: aiBody.model || null,
       status,
       message: err.message || 'Unknown error',
-      context: { jsonResponse: !!_jsonResponse },
+      context: { jsonResponse: !!_jsonResponse, serverMs, upstreamMs, authMs, reqBytes, region },
     });
-    return res.status(status).json({ error: err.message });
+    return res.status(status).json({ error: err.message, _perf: { serverMs, authMs, upstreamMs, reqBytes, region } });
   }
 };
 

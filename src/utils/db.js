@@ -351,4 +351,46 @@ export async function saveAppGoal(userId, app, key, value) {
   if (error) throw error;
 }
 
+// AI proxy performance telemetry — see sql/perf_log.sql. One row per analysis,
+// written fire-and-forget (like every other mutation here) so instrumentation
+// never blocks or breaks the user-facing flow. `perf` carries both the client's
+// measured fields (encode/clientMs/attempts) and the server's `_perf` segments.
+export async function recordPerf(userId, perf) {
+  const clientMs = perf.clientMs ?? null;
+  const serverMs = perf.serverMs ?? null;
+  const networkMs = (clientMs != null && serverMs != null) ? Math.max(0, clientMs - serverMs) : null;
+  const { error } = await supabase.from('perf_log').insert({
+    user_id: userId,
+    kind: perf.kind ?? null,
+    provider: perf.provider ?? null,
+    model: perf.model ?? null,
+    model_used: perf.modelUsed ?? null,
+    success: !!perf.success,
+    status: perf.status ?? null,
+    attempts: perf.attempts ?? null,
+    encode_ms: perf.encodeMs ?? null,
+    req_bytes: perf.reqBytes ?? null,
+    resp_bytes: perf.respBytes ?? null,
+    client_ms: clientMs,
+    server_ms: serverMs,
+    auth_ms: perf.authMs ?? null,
+    upstream_ms: perf.upstreamMs ?? null,
+    network_ms: networkMs,
+    region: perf.region ?? null,
+    error_message: perf.errorMessage ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function getPerfLogs(userId, limit = 200) {
+  const { data, error } = await supabase
+    .from('perf_log')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data || [];
+}
+
 export { DEFAULT_GOALS, DEFAULT_NOTIF };

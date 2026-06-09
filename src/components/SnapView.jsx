@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { analyzeFood, analyzeFoodText } from '../utils/api';
 
 const COLORS = { cal: '#1d9e75', protein: '#d4537e', carbs: '#378add', fat: '#ba7517', fiber: '#639922' };
@@ -47,7 +47,12 @@ function scaleFromPer100(grams, per100) {
 
 const EMPTY_PER100 = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
 
-export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, foodLibrary = [], logs = [] }) {
+export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, onRecordPerf, foodLibrary = [], logs = [] }) {
+  // Image encode time + payload size, measured in handleFile and read in
+  // runAnalysis so the perf_log row captures the full pipeline (encode → upload →
+  // inference) for one analysis. Held in a ref so it survives re-renders without
+  // forcing one.
+  const captureMeta = useRef({ encodeMs: null, reqBytes: null });
   const [state, setState] = useState('idle');
   const [imgUrl, setImgUrl] = useState(null);
   const [imgThumb, setImgThumb] = useState(null);
@@ -271,11 +276,15 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
     const objectUrl = URL.createObjectURL(f);
     setImgUrl(objectUrl);
     try {
+      const tEnc = performance.now();
       const [analysisDataUrl, thumbDataUrl] = await Promise.all([
         makeJpeg(objectUrl, 1600, 0.85),
         makeJpeg(objectUrl, 300, 0.7),
       ]);
-      setImgB64(analysisDataUrl.split(',')[1]);
+      const b64 = analysisDataUrl.split(',')[1];
+      // base64 inflates the raw bytes by ~4/3; back it out for the real upload size.
+      captureMeta.current = { encodeMs: Math.round(performance.now() - tEnc), reqBytes: Math.round(b64.length * 3 / 4) };
+      setImgB64(b64);
       setImgThumb(thumbDataUrl);
       setState('preview');
     } catch (err) {
@@ -283,15 +292,20 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
     }
   };
 
-  const runAnalysis = async (analyzeFn) => {
+  const runAnalysis = async (analyzeFn, meta = {}) => {
     if (!localStorage.getItem('nutrisnap_api_key')) {
       setErr('No API key set. Go to Goals & Settings → AI Provider to add one.');
       return false;
     }
     setState('analyzing');
     setErr(null);
+    const provider = localStorage.getItem('nutrisnap_api_provider') || 'anthropic';
     try {
       const a = await analyzeFn();
+      onRecordPerf?.({
+        ...(a._perf || {}), ...meta, kind: meta.kind, provider,
+        modelUsed: a._modelUsed || null, success: true,
+      });
       const name = a.name || 'Meal';
       const grams = a.amount || 0; // AI always returns total weight in grams
       const totals = {
@@ -333,19 +347,25 @@ export default function SnapView({ onSaved, onSaveToLibrary, onUpdateLibrary, fo
       setState('review');
       return true;
     } catch (e) {
+      onRecordPerf?.({
+        ...(e._perf || {}), ...meta, kind: meta.kind, provider,
+        success: false, errorMessage: e.message || 'Unknown error',
+      });
       setErr(e.message || 'Could not analyze. Please try again.');
       return false;
     }
   };
 
   const analyze = async () => {
-    const ok = await runAnalysis(() => analyzeFood(imgB64, 'image/jpeg'));
+    const ok = await runAnalysis(() => analyzeFood(imgB64, 'image/jpeg'),
+      { kind: 'image', ...captureMeta.current });
     if (!ok) setState('preview');
   };
 
   const analyzeText = async () => {
     if (!textInput.trim()) return;
-    const ok = await runAnalysis(() => analyzeFoodText(textInput.trim()));
+    const ok = await runAnalysis(() => analyzeFoodText(textInput.trim()),
+      { kind: 'text', encodeMs: null, reqBytes: textInput.trim().length });
     if (!ok) setState('idle');
   };
 

@@ -4,7 +4,7 @@ import LogView from '../components/LogView';
 import SnapView from '../components/SnapView';
 import ReportView from '../components/ReportView';
 import SettingsView from '../components/SettingsView';
-import { getLogs, getLogImages, addLog, updateLog, deleteLog, bulkAddLogs, getGoals, saveGoals, getGoalsHistory, addGoalsHistoryEntry, getNotifSettings, saveNotifSettings, getFoodLibrary, saveFoodToLibrary, updateFoodInLibrary, DEFAULT_GOALS, DEFAULT_NOTIF } from '../utils/db';
+import { getLogs, getLogImages, addLog, updateLog, deleteLog, bulkAddLogs, getGoals, saveGoals, getGoalsHistory, addGoalsHistoryEntry, getNotifSettings, saveNotifSettings, getFoodLibrary, saveFoodToLibrary, updateFoodInLibrary, recordPerf, getPerfLogs, DEFAULT_GOALS, DEFAULT_NOTIF } from '../utils/db';
 import { todayStr } from '../utils/date';
 
 const ACCENT = '#1d9e75';
@@ -148,6 +148,9 @@ export default function NutriSnapApp({ user, active, apps, activeApp, onSwitch }
     updateFoodInLibrary(user.id, name, macros).catch(console.error);
   };
 
+  // Fire-and-forget telemetry: a failed perf write must never disturb the snap flow.
+  const handleRecordPerf = (perf) => recordPerf(user.id, perf).catch(console.error);
+
   const handleImport = (entries) => {
     const existingIds = new Set(logs.map(l => l.id));
     const toAdd = entries.filter(e => !existingIds.has(e.id));
@@ -187,7 +190,7 @@ export default function NutriSnapApp({ user, active, apps, activeApp, onSwitch }
       title={TITLES[tab]} subtitle={SUBS[tab]} headerRight={headerRight}
       tabs={TABS} activeTab={tab} onTabChange={setTab}>
       {tab === 'log' && <LogView logs={logs} goals={goals} onDelete={handleDeleteLog} onEdit={handleEditLog} onRelog={handleRelog} />}
-      {tab === 'snap' && <SnapView foodLibrary={foodLibrary} logs={logs} onSaved={entry => { handleAddLog(entry); setTab('log'); }} onSaveToLibrary={handleSaveToLibrary} onUpdateLibrary={handleUpdateLibrary} />}
+      {tab === 'snap' && <SnapView foodLibrary={foodLibrary} logs={logs} onSaved={entry => { handleAddLog(entry); setTab('log'); }} onSaveToLibrary={handleSaveToLibrary} onUpdateLibrary={handleUpdateLibrary} onRecordPerf={handleRecordPerf} />}
       {tab === 'report' && <ReportView logs={logs} goalsHistory={goalsHistory} />}
       {tab === 'settings' && (
         <SettingsView
@@ -198,6 +201,7 @@ export default function NutriSnapApp({ user, active, apps, activeApp, onSwitch }
           onGoalSave={handleGoalSave}
           onNotifChange={handleNotifChange}
           onImport={handleImport}
+          onLoadPerf={() => getPerfLogs(user.id)}
         />
       )}
     </AppShell>

@@ -20,10 +20,15 @@ async function getToken() {
   return data.session?.access_token || '';
 }
 
+const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
 async function callClaude(body, retries = 2) {
   const { _provider, _userApiKey } = getApiMeta();
   const _supabaseToken = await getToken();
   for (let attempt = 0; attempt <= retries; attempt++) {
+    // Timed per-attempt so client_ms reflects the round trip of the attempt that
+    // actually succeeded (not the backoff sleeps of earlier failed attempts).
+    const t0 = now();
     let response;
     try {
       response = await fetch(PROXY, {
@@ -40,7 +45,8 @@ async function callClaude(body, retries = 2) {
         await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
         continue;
       }
-      throw new Error('Network error — check your connection and try again.');
+      throw Object.assign(new Error('Network error — check your connection and try again.'),
+        { _perf: { attempts: attempt + 1, status: 0 } });
     }
     if (response.status === 401) {
       await supabase.auth.signOut();
@@ -48,14 +54,21 @@ async function callClaude(body, retries = 2) {
       throw new Error('Unauthorized');
     }
     if (response.status === 413) {
-      throw new Error('Photo is too large to upload. Try retaking at a lower resolution.');
+      throw Object.assign(new Error('Photo is too large to upload. Try retaking at a lower resolution.'),
+        { _perf: { attempts: attempt + 1, status: 413 } });
     }
     if ((response.status === 429 || response.status === 529 || response.status === 503) && attempt < retries) {
       await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
       continue;
     }
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || `Server error ${response.status}`);
+    if (!response.ok) {
+      throw Object.assign(new Error(data.error || `Server error ${response.status}`),
+        { _perf: { ...(data._perf || {}), attempts: attempt + 1, status: response.status } });
+    }
+    // Stash client-measured timing for the perf_log row; merged with the server's
+    // _perf by the analyze* callers below.
+    data._clientPerf = { clientMs: Math.round(now() - t0), attempts: attempt + 1, status: 200 };
     return data;
   }
 }
@@ -177,7 +190,7 @@ export async function analyzeFood(base64, mimeType) {
     ]),
   });
   const raw = cleanRaw(data.content.map(b => b.text || '').join(''));
-  return { ...parseJson(raw), _modelUsed: data._modelUsed };
+  return { ...parseJson(raw), _modelUsed: data._modelUsed, _perf: { ...(data._perf || {}), ...(data._clientPerf || {}) } };
 }
 
 export async function analyzeFoodText(description) {
@@ -188,7 +201,7 @@ export async function analyzeFoodText(description) {
     messages: jsonMessages(`Analyze this meal description: "${description}"\n\nIdentify every component the user named (or that's typical of the dish if generic). For dishes named without an explicit quantity (e.g. "salmon", "burger"), assume a typical single-serving portion. ${RULES}\n\n${SCHEMA_BLOCK}`),
   });
   const raw = cleanRaw(data.content.map(b => b.text || '').join(''));
-  return { ...parseJson(raw), _modelUsed: data._modelUsed };
+  return { ...parseJson(raw), _modelUsed: data._modelUsed, _perf: { ...(data._perf || {}), ...(data._clientPerf || {}) } };
 }
 
 export async function getNudge(todayTotals, goals) {
