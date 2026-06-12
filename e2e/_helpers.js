@@ -54,7 +54,10 @@ async function signInFixedUser(page, email = FIXED_EMAIL, password = FIXED_PASSW
 }
 
 async function logSalmonByText(page) {
-  await page.click('button:has-text("Snap")');
+  // Exact match: the multi-app shell added a "NutriSnap" header switcher, and
+  // has-text("Snap") is a substring match that now also matches "NutriSnap".
+  // text-is targets only the bottom-nav Snap tab (label is exactly "Snap").
+  await page.click('button:text-is("Snap")');
   await page.waitForTimeout(800);
   await page.fill('input[type="text"]', 'Salmon');
   await page.click('button:has(i.ti-arrow-right)');
@@ -66,7 +69,9 @@ async function logSalmonByText(page) {
     }
     // text-transform:uppercase makes innerText return all caps in some browsers,
     // so we lowercase the haystack and match on lowercase substrings.
-    if (t.includes('per 100') && t.includes('total for')) return;
+    // Unit-agnostic: discrete foods (e.g. a salmon "fillet") show "PER 1 FILLET"
+    // rather than "PER 100 G", so key off the review screen's stable sections.
+    if (t.includes('components') && t.includes('total for')) return;
   }
   throw new Error('Timed out waiting for review screen');
 }

@@ -22,8 +22,8 @@ test('report tab renders one chart per metric and switches periods', async ({ pa
 
   const label = async () => (await page.evaluate(() => document.body.innerText)).toLowerCase();
 
-  // Default period is Day → "Today".
-  expect((await label()).includes('today'), 'Default period label is "Today"').toBeTruthy();
+  // Default period is Week → "This week".
+  expect((await label()).includes('this week'), 'Default period label is "This week"').toBeTruthy();
 
   await page.click('button:text-is("Week")');
   await page.waitForTimeout(400);
