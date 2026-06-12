@@ -130,21 +130,15 @@ cmd_run() {
     args+=(--userns=keep-id "${publish[@]}")
   fi
 
-  # Default command: the agent, unprompted (safe — it's boxed). Override by
-  # passing your own command.
-  #
-  # `claude --dangerously-skip-permissions` has a one-time "accept bypass mode"
-  # gate. In a fresh isolated HOME that gate hasn't been accepted, and instead
-  # of showing it claude just exits immediately — which looks like the command
-  # "does nothing". We pre-record the acceptance in the agent HOME's
-  # ~/.claude.json (merging, not clobbering) before launching, so the flag works
-  # on the first run. node is present in the agent image.
+  # Default command: launch the agent. We deliberately do NOT pass
+  # --dangerously-skip-permissions: its interactive bypass-mode warning renders
+  # badly in this box and exits immediately (print mode is unaffected). Instead,
+  # no-prompt behaviour comes from the seeded agent HOME's
+  # .claude/settings.json ("permissions.defaultMode": "bypassPermissions"), so
+  # plain `claude` starts prompt-free. Override by passing your own command.
   local run_cmd=("$@")
   if [ ${#run_cmd[@]} -eq 0 ]; then
-    run_cmd=(bash -lc '
-      node -e "const fs=require(\"fs\"),p=process.env.HOME+\"/.claude.json\";let j={};try{j=JSON.parse(fs.readFileSync(p,\"utf8\"))}catch(e){}j.bypassPermissionsModeAccepted=true;fs.writeFileSync(p,JSON.stringify(j,null,2))" 2>/dev/null || true
-      exec claude --dangerously-skip-permissions
-    ')
+    run_cmd=(claude)
   fi
 
   exec podman run "${args[@]}" "$IMAGE" "${run_cmd[@]}"
