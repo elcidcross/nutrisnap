@@ -1,5 +1,3 @@
-const { chromium } = require('playwright');
-
 const BASE_URL = process.env.BASE_URL || 'https://nutrisnap-lovat.vercel.app';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
@@ -11,14 +9,6 @@ const FIXED_PASSWORD = process.env.E2E_PASSWORD || 'TestPass123!';
 if (!GEMINI_API_KEY) {
   console.error('GEMINI_API_KEY env var is required.');
   process.exit(2);
-}
-
-async function newBrowser() {
-  const browser = await chromium.launch({ headless: process.env.HEADED !== '1' });
-  const context = await browser.newContext();
-  const page = await context.newPage();
-  page.on('pageerror', err => console.log('PAGE ERROR:', err.message));
-  return { browser, page };
 }
 
 async function signUpFreshUser(page, prefix = 'e2e') {
@@ -81,14 +71,4 @@ async function logSalmonByText(page) {
   throw new Error('Timed out waiting for review screen');
 }
 
-function assert(cond, msg) {
-  if (!cond) {
-    console.error('FAIL:', msg);
-    process.exitCode = 1;
-    return false;
-  }
-  console.log('PASS:', msg);
-  return true;
-}
-
-module.exports = { BASE_URL, GEMINI_API_KEY, FIXED_EMAIL, FIXED_PASSWORD, newBrowser, signUpFreshUser, signInFixedUser, logSalmonByText, assert };
+module.exports = { BASE_URL, GEMINI_API_KEY, FIXED_EMAIL, FIXED_PASSWORD, signUpFreshUser, signInFixedUser, logSalmonByText };

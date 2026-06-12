@@ -27,15 +27,20 @@
     "workbox-streams": "^7.0.0"
   },
   "devDependencies": {
-    "playwright": "1.49.1"
+    "@playwright/test": "1.49.1"
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "vercel-build": "REACT_APP_BUILD_TIME=$(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M JST') REACT_APP_VERSION=$npm_package_version react-scripts build",
     "test": "react-scripts test",
+    "test:unit": "react-scripts test --watchAll=false",
     "eject": "react-scripts eject",
-    "e2e": "for f in e2e/*.test.js; do echo \"\\n=== $f ===\"; node \"$f\" || exit 1; done"
+    "dev:proxy": "vercel dev --listen 0.0.0.0:3000",
+    "e2e": "playwright test",
+    "e2e:local": "BASE_URL=http://localhost:3000 playwright test",
+    "verify": "npm run test:unit && npm run e2e:local",
+    "e2e:report": "playwright show-report --host 0.0.0.0 --port ${PW_REPORT_PORT:-3000}"
   },
   "eslintConfig": {
     "extends": [

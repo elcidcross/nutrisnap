@@ -4,6 +4,12 @@ node_modules/
 # production build
 build/
 
+# Playwright e2e artifacts
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
 # environment variables
 .env
 .env.local

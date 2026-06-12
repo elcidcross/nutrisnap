@@ -16,13 +16,14 @@ scripts/dev vercel dev --listen 0.0.0.0:3000        # dev server + serverless pr
 scripts/dev npm run build                           # production build
 scripts/dev npm test -- --watchAll=false            # Jest (CRA). Currently covers src/utils/api.test.js (parseJson)
 scripts/dev npm test -- -t "parses a normal"        # run a single Jest test by name
-GEMINI_API_KEY=<key> scripts/dev npm run e2e        # Playwright e2e against BASE_URL (defaults to prod). Chromium is baked into the image
-BASE_URL=http://localhost:3000 GEMINI_API_KEY=<key> scripts/dev node e2e/snap_text.test.js  # one e2e file against the local dev server in the same container
+GEMINI_API_KEY=<key> scripts/dev npm run e2e        # Playwright e2e (@playwright/test) against BASE_URL (defaults to prod). Chromium is baked into the image
+BASE_URL=http://localhost:3000 GEMINI_API_KEY=<key> scripts/dev npx playwright test snap_text  # one e2e file against the local dev server in the same container
+scripts/dev npm run e2e:report                      # serve the HTML report (writes playwright-report/) on :3000 — open http://localhost:3000 on the host. Stop the dev server first so :3000 is free
 scripts/dev                                          # interactive shell inside the container
 scripts/dev down                                     # stop+remove the container (volume + image stay)
 ```
 
-`node_modules` lives in a named podman volume (`nutrisnap-node-modules`), not in the host tree — so `ls node_modules` on the host shows nothing. Run `scripts/dev npm install` (not host `npm install`) after pulling changes to `package.json`. Chromium is baked into the image at `/ms-playwright`; bumping the playwright version in package.json should be matched in `Containerfile`.
+`node_modules` lives in a named podman volume (`nutrisnap-node-modules`), not in the host tree — so `ls node_modules` on the host shows nothing. Run `scripts/dev npm install` (not host `npm install`) after pulling changes to `package.json`. Chromium is baked into the image at `/ms-playwright`; bumping the `@playwright/test` version in package.json should be matched in `Containerfile` (the `npx playwright@<ver> install` line).
 
 ### Isolated agent (`scripts/agent`)
 
