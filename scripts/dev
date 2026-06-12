@@ -19,6 +19,9 @@ VOLUME=nutrisnap-node-modules
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# shellcheck source=scripts/env-lib.sh
+. "$REPO_ROOT/scripts/env-lib.sh"
+
 cmd_build() {
   podman build -t "$IMAGE" -f "$REPO_ROOT/Containerfile" "$REPO_ROOT"
 }
@@ -40,9 +43,11 @@ cmd_up() {
   fi
   podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
 
-  local env_args=()
-  [ -f "$REPO_ROOT/.env.local" ]      && env_args+=(--env-file "$REPO_ROOT/.env.local")
-  [ -f "$REPO_ROOT/.env.e2e.local" ]  && env_args+=(--env-file "$REPO_ROOT/.env.e2e.local")
+  # Source .env files and forward each key as -e KEY=value. podman --env-file
+  # would keep surrounding quotes literally and break the app (see env-lib.sh).
+  local ENV_ARGS=()
+  load_env_args "$REPO_ROOT/.env.local" "$REPO_ROOT/.env.e2e.local"
+  local env_args=("${ENV_ARGS[@]}")
 
   # Repo is mounted :z (shared SELinux label), NOT :Z (private). The repo is
   # shared with the nutrisnap-agent box, whose isolated HOME lives at

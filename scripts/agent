@@ -35,6 +35,9 @@ CONTAINER=nutrisnap-agent
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 AGENT_HOME="$REPO_ROOT/.agent-home"   # isolated HOME for the in-container agent
 
+# shellcheck source=scripts/env-lib.sh
+. "$REPO_ROOT/scripts/env-lib.sh"
+
 cmd_build() {
   podman image exists "$BASE_IMAGE" || \
     podman build -t "$BASE_IMAGE" -f "$REPO_ROOT/Containerfile" "$REPO_ROOT"
@@ -88,9 +91,11 @@ cmd_run() {
   )
   [ -t 0 ] && [ -t 1 ] && args+=(-it)
 
-  # Project secrets, same as scripts/dev.
-  [ -f "$REPO_ROOT/.env.local" ]     && args+=(--env-file "$REPO_ROOT/.env.local")
-  [ -f "$REPO_ROOT/.env.e2e.local" ] && args+=(--env-file "$REPO_ROOT/.env.e2e.local")
+  # Project secrets, same as scripts/dev. Source + forward as -e KEY=value
+  # rather than --env-file, which keeps quotes literally (see env-lib.sh).
+  local ENV_ARGS=()
+  load_env_args "$REPO_ROOT/.env.local" "$REPO_ROOT/.env.e2e.local"
+  args+=("${ENV_ARGS[@]}")
 
   # Forward an API key if the user drives auth that way instead of OAuth.
   [ -n "${ANTHROPIC_API_KEY:-}" ] && args+=(-e "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY")
