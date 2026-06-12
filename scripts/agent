@@ -91,6 +91,13 @@ cmd_run() {
   )
   [ -t 0 ] && [ -t 1 ] && args+=(-it)
 
+  # Color. The base image sets CI=1 (so react-scripts runs non-interactively),
+  # which Claude Code's color detection reads as "automated env" and renders
+  # monochrome. Force color on and forward the host terminal's TERM/COLORTERM so
+  # the boxed CLI looks like it does on the host. (CI=1 stays for the toolchain.)
+  args+=(-e FORCE_COLOR=1 -e "TERM=${TERM:-xterm-256color}")
+  [ -n "${COLORTERM:-}" ] && args+=(-e "COLORTERM=$COLORTERM")
+
   # Project secrets, same as scripts/dev. Source + forward as -e KEY=value
   # rather than --env-file, which keeps quotes literally (see env-lib.sh).
   local ENV_ARGS=()
