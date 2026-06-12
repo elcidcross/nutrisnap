@@ -91,7 +91,6 @@ case "${1:-shell}" in
   build) shift; cmd_build "$@" ;;
   down)  shift; cmd_down "$@" ;;
   up)    shift; cmd_up "$@" ;;
-  shell) shift; cmd_exec bash ;;
-  "")    cmd_exec bash ;;
+  shell) cmd_exec bash ;;
   *)     cmd_exec "$@" ;;
 esac
