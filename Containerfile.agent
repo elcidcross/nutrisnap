@@ -26,6 +26,12 @@ RUN apt-get update \
 RUN npm install -g @anthropic-ai/claude-code \
  && rm -rf /root/.npm
 
+# The CLI lives in root-owned /usr/local but the agent runs as `node`, so it can
+# never self-update at runtime (it would just warn on every start). The image
+# owns the version instead — bump it by rebuilding (scripts/agent build re-pulls
+# the latest @anthropic-ai/claude-code).
+ENV DISABLE_AUTOUPDATER=1
+
 COPY scripts/agent-entrypoint.sh /usr/local/bin/agent-entrypoint.sh
 COPY scripts/agent-firewall.sh   /usr/local/bin/agent-firewall.sh
 RUN chmod +x /usr/local/bin/agent-entrypoint.sh /usr/local/bin/agent-firewall.sh
