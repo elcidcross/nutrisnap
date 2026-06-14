@@ -100,7 +100,6 @@ describe('reportCardFor', () => {
     const card = reportCardFor(WEEK_START, ctx);
     expect(card.items.map(i => i.key)).toEqual(['nutrition', 'jog', 'meditation', 'workout']);
     expect(card.items.filter(i => i.key === 'nutrition')).toHaveLength(1);
-    expect(card.overall.score).toBe(1);
     expect(card.overall.letter).toBe('A+');
   });
 
@@ -114,12 +113,45 @@ describe('reportCardFor', () => {
     const card = reportCardFor(WEEK_START, ctx);
     expect(card.items.find(i => i.app === 'meditation').na).toBe(true);
     expect(card.items.find(i => i.app === 'workout').na).toBe(true);
-    expect(card.overall.score).toBe(1); // only nutrition + jog counted
-    expect(card.overall.letter).toBe('A+');
+    expect(card.overall.letter).toBe('A+'); // only nutrition + jog counted
   });
 
-  test('label is the ISO week number', () => {
+  test('overall is the GPA of subject grades, not the raw-percent average', () => {
+    const ctx = {
+      nutritionLogs: [{ timestamp: NOW, calories: 5000, protein: 0, carbs: 600, fat: 200 }], // F
+      goalsHistory: GOALS_HISTORY,
+      appGoals: { jog: { weekly_distance: 10 } },
+      entriesByApp: { jog: [{ timestamp: NOW - DAY, distance: 10 }] }, // A+
+    };
+    const card = reportCardFor(WEEK_START, ctx);
+    // A+ (4.3) and F (0) → GPA 2.15 → rounded down to C (a true middle, not F)
+    expect(card.overall.letter).toBe('C');
+  });
+
+  test('A+ overall requires every subject to be A+ (no rounding up)', () => {
+    const ctx = {
+      nutritionLogs: [{ timestamp: NOW, calories: 1800, protein: 150, carbs: 180, fat: 60 }], // A+
+      goalsHistory: GOALS_HISTORY,
+      appGoals: { jog: { weekly_distance: 10 } },
+      entriesByApp: { jog: [{ timestamp: NOW - DAY, distance: 9.2 }] }, // 92% → A-
+    };
+    // A+ (4.3) + A- (3.7) = 4.0 → A, not A+
+    expect(reportCardFor(WEEK_START, ctx).overall.letter).toBe('A');
+  });
+
+  test('label is the ISO year + week number', () => {
     const card = reportCardFor(WEEK_START, { entriesByApp: {} });
-    expect(card.label).toMatch(/^Week \d{1,2}$/);
+    expect(card.label).toMatch(/^\d{4} Week \d{1,2}$/);
+  });
+});
+
+describe('nutrition breakdown', () => {
+  test('exposes a per-macro avg/target/score for the "why"', () => {
+    const logs = [{ timestamp: NOW, calories: 1800, protein: 75, carbs: 180, fat: 60 }];
+    const g = gradeNutrition(WEEK_START, WEEK_END, logs, GOALS_HISTORY);
+    const protein = g.macros.find(m => m.key === 'protein');
+    expect(protein).toMatchObject({ avg: 75, target: 150, dir: 'floor' });
+    expect(protein.score).toBe(0.5);
+    expect(g.macros.find(m => m.key === 'calories').score).toBe(1);
   });
 });

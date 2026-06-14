@@ -40,6 +40,18 @@ export function letterFor(score) {
   return 'F';
 }
 
+// Letters ↔ grade points (4.0 scale). The overall grade is the *average of the
+// subject grades* (a GPA), not the average of raw percentages — otherwise a fair
+// middle (e.g. a B- and an F) collapses into F, since F spans everything under 60%.
+const GRADE_POINTS = { 'A+': 4.3, A: 4.0, 'A-': 3.7, 'B+': 3.3, B: 3.0, 'B-': 2.7, 'C+': 2.3, C: 2.0, 'C-': 1.7, 'D+': 1.3, D: 1.0, 'D-': 0.7, F: 0 };
+// Round a GPA *down* to its band — you only earn a grade once the average actually
+// reaches it, so A+ stays special (every subject must be A+ to land an A+ overall).
+const POINT_TO_LETTER = [['A+', 4.3], ['A', 4.0], ['A-', 3.7], ['B+', 3.3], ['B', 3.0], ['B-', 2.7], ['C+', 2.3], ['C', 2.0], ['C-', 1.7], ['D+', 1.3], ['D', 1.0], ['D-', 0.7]];
+export function letterFromPoints(p) {
+  for (const [letter, min] of POINT_TO_LETTER) if (p >= min) return letter;
+  return 'F';
+}
+
 export function letterColor(letter) {
   switch (letter[0]) {
     case 'A': return '#1d9e75';
@@ -53,21 +65,26 @@ export function letterColor(letter) {
 export function weekStartOf(ts) { return periodStart('week', ts); }
 export function weekEndOf(weekStart) { return periodEnd('week', weekStart); }
 
-// ISO-8601 week number of the date at `ts` (week 1 holds the year's first Thursday).
-function isoWeek(ts) {
+// ISO-8601 week-year and week number for the date at `ts` (week 1 holds the year's
+// first Thursday; the week-year is the year that Thursday falls in, which can differ
+// from the calendar year around New Year).
+function isoWeekParts(ts) {
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);
   const day = d.getDay() || 7;       // Sun → 7
   d.setDate(d.getDate() + 4 - day);  // step to the Thursday of this ISO week
-  const yearStart = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil((((d - yearStart) / DAY) + 1) / 7);
+  const year = d.getFullYear();
+  const yearStart = new Date(year, 0, 1);
+  const week = Math.ceil((((d - yearStart) / DAY) + 1) / 7);
+  return { year, week };
 }
 
-// Report cards are labelled by week number (e.g. "Week 24"). Our weeks start Sunday,
-// so we read the number off that week's Thursday — each Sunday→Saturday span holds
-// exactly one Thursday, giving a stable, consecutive numbering.
+// Report cards are labelled by year + week number (e.g. "2026 Week 24"). Our weeks
+// start Sunday, so we read it off that week's Thursday — each Sunday→Saturday span
+// holds exactly one Thursday, giving stable, consecutive numbering.
 export function weekLabel(weekStart) {
-  return `Week ${isoWeek(weekStart + 4 * DAY)}`;
+  const { year, week } = isoWeekParts(weekStart + 4 * DAY);
+  return `${year} Week ${week}`;
 }
 
 // Date range of a week, e.g. "Jun 8 – 14" — shown as a card subtitle.
@@ -117,19 +134,23 @@ export function gradeNutrition(weekStart, weekEnd, logs, goalsHistory) {
   const days = Object.keys(byDay);
   if (days.length === 0) return { key: 'nutrition', app: 'nutrisnap', label: 'Nutrition', na: true }; // no meals logged → N/A
 
-  let total = 0, n = 0;
-  for (const k of days) {
-    const goal = goalsAtDate(+k, goalsHistory);
-    let daySum = 0, dn = 0;
-    for (const m of MACROS) {
-      const s = macroScore(byDay[k][m.key], goal[m.key], m.dir);
-      if (s != null) { daySum += s; dn += 1; }
+  // Per-macro breakdown over the logged days: the daily average actual vs target and
+  // that macro's own sub-score. This is what lets the card explain *why* the grade is
+  // what it is ("protein under target"), and the overall is just the mean of these.
+  const macros = MACROS.map(m => {
+    let aSum = 0, tSum = 0, sSum = 0, n = 0;
+    for (const k of days) {
+      const target = goalsAtDate(+k, goalsHistory)[m.key];
+      const s = macroScore(byDay[k][m.key], target, m.dir);
+      if (s == null) continue;
+      aSum += byDay[k][m.key]; tSum += target; sSum += s; n += 1;
     }
-    if (dn) { total += daySum / dn; n += 1; }
-  }
-  if (!n) return { key: 'nutrition', app: 'nutrisnap', label: 'Nutrition', na: true };
-  const score = total / n;
-  return { key: 'nutrition', app: 'nutrisnap', label: 'Nutrition', score, letter: letterFor(score), loggedDays: n };
+    return n ? { key: m.key, dir: m.dir, avg: aSum / n, target: tSum / n, score: sSum / n } : null;
+  }).filter(Boolean);
+
+  if (!macros.length) return { key: 'nutrition', app: 'nutrisnap', label: 'Nutrition', na: true };
+  const score = macros.reduce((a, x) => a + x.score, 0) / macros.length;
+  return { key: 'nutrition', app: 'nutrisnap', label: 'Nutrition', score, letter: letterFor(score), loggedDays: days.length, macros };
 }
 
 // --- Per-app habit targets ---
@@ -181,10 +202,10 @@ export function reportCardFor(weekStart, ctx) {
     if (g) items.push(g);
   }
 
-  // Overall averages only the graded items; N/A (nothing recorded) doesn't count.
+  // Overall is the GPA of the graded subjects; N/A (nothing recorded) doesn't count.
   const graded = items.filter(i => !i.na);
   const overall = graded.length
-    ? (() => { const s = graded.reduce((a, i) => a + i.score, 0) / graded.length; return { score: s, letter: letterFor(s) }; })()
+    ? (() => { const pts = graded.reduce((a, i) => a + GRADE_POINTS[i.letter], 0) / graded.length; return { points: pts, letter: letterFromPoints(pts) }; })()
     : null;
 
   return { weekStart, weekEnd, label: weekLabel(weekStart), range: weekRange(weekStart), items, overall };
