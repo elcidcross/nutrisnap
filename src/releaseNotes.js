@@ -10,7 +10,7 @@
 
 const RELEASE_NOTES = [
   {
-    version: '1.4.20',
+    version: '1.4.22',
     date: '2026-06-14 16:30 JST',
     notes: [
       'The Body Report now charts all metrics — adding body water, bone mass, BMR, visceral fat and leg score alongside the existing weight, body fat and muscle charts.',
