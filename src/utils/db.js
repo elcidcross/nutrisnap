@@ -412,6 +412,24 @@ export async function deleteObjective(userId, id) {
   if (error) throw error;
 }
 
+// Report Card teacher's notes (AI-generated, see sql/report_card_notes.sql). Returned
+// as a flat map keyed `${week_start}|${persona}` so the Report Card can look up a
+// cached note for the week+persona in view; (user_id, week_start, persona) is a real
+// unique constraint, so a regenerate upserts over the old note.
+export async function getReportCardNotes(userId) {
+  const { data, error } = await supabase
+    .from('report_card_notes').select('week_start, persona, text').eq('user_id', userId);
+  if (error) throw error;
+  return Object.fromEntries((data || []).map(r => [`${r.week_start}|${r.persona}`, r.text]));
+}
+
+export async function saveReportCardNote(userId, weekStart, persona, text, model) {
+  const { error } = await supabase
+    .from('report_card_notes')
+    .upsert({ user_id: userId, week_start: weekStart, persona, text, model }, { onConflict: 'user_id,week_start,persona' });
+  if (error) throw error;
+}
+
 // AI proxy performance telemetry — see sql/perf_log.sql. One row per analysis,
 // written fire-and-forget (like every other mutation here) so instrumentation
 // never blocks or breaks the user-facing flow. `perf` carries both the client's

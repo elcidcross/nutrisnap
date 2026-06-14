@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import AppShell from '../components/AppShell';
-import { getLogs, getGoals, getGoalsHistory, getAppGoals, jogs, meditations, workouts } from '../utils/db';
-import { reportCardFor, recentWeekStarts, letterColor } from '../utils/reportcard';
+import { getLogs, getGoals, getGoalsHistory, getAppGoals, getObjectives, getBodyMetrics, getReportCardNotes, saveReportCardNote, jogs, meditations, workouts } from '../utils/db';
+import { reportCardFor, recentWeekStarts, letterColor, buildNoteContext } from '../utils/reportcard';
+import { computeGoalState, goalTitle, dueLabel, findMetric } from '../utils/goals';
+import { getReportCardNote } from '../utils/api';
 
 // Report Card — its own app. Grades each week against the habits you've already
 // defined in the other apps (Jog's weekly distance, Meditation's days/week, Workout's
@@ -26,9 +28,14 @@ const MANILA_EDGE = '#e3d2a2';
 const INK = '#46412f';
 const COMMENT_INK = '#a8432a'; // red-brown, for the teacher's-note comment line
 
+const DAY = 86400000;
+
 export default function ReportCardApp({ user, active, apps, activeApp, onSwitch }) {
   const [data, setData] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  const [notes, setNotes] = useState({}); // `${weekStart}|${persona}` -> { text? | loading? | error? }
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
 
   // Re-fetch every time the app becomes active: the report card is a pure aggregator
   // of *other* apps' data (their app_goals targets and logs), so a habit target set
@@ -46,14 +53,19 @@ export default function ReportCardApp({ user, active, apps, activeApp, onSwitch 
       jogs.load(user.id).catch(() => []),
       meditations.load(user.id).catch(() => []),
       workouts.load(user.id).catch(() => []),
-    ]).then(([logs, , hist, jgGoals, mdGoals, wkGoals, jg, md, wk]) => {
+      getObjectives(user.id).catch(() => []),
+      getBodyMetrics(user.id).catch(() => []),
+      getReportCardNotes(user.id).catch(() => ({})),
+    ]).then(([logs, , hist, jgGoals, mdGoals, wkGoals, jg, md, wk, objectives, bodyEntries, savedNotes]) => {
       if (cancelled) return;
       setData({
         nutritionLogs: logs,
         goalsHistory: hist,
         appGoals: { jog: jgGoals, meditation: mdGoals, workout: wkGoals },
         entriesByApp: { jog: jg, meditation: md, workout: wk },
+        objectives, bodyEntries,
       });
+      setNotes(Object.fromEntries(Object.entries(savedNotes).map(([k, text]) => [k, { text }])));
     }).catch(console.error).finally(() => { if (!cancelled) setLoaded(true); });
     return () => { cancelled = true; };
   }, [active, user.id]);
@@ -64,6 +76,40 @@ export default function ReportCardApp({ user, active, apps, activeApp, onSwitch 
   const weeks = data ? recentWeekStarts(13).map(ws => reportCardFor(ws, data)) : [];
   // Only finished weeks with a grade — the in-progress week isn't shown until it ends.
   const shown = weeks.filter(w => w.weekEnd <= now && w.overall);
+
+  // Active deadline goals (Body metrics) with current value, status, and recent
+  // readings so the note can work out whether they're on pace for the deadline.
+  const goalStates = (data?.objectives || []).filter(o => o.type === 'reach' && o.status === 'active').map(o => {
+    const st = computeGoalState(o, data.bodyEntries || [], now);
+    const def = findMetric(o.app, o.metric) || {};
+    const history = (data.bodyEntries || [])
+      .filter(e => def.field && e[def.field] != null)
+      .slice(0, 5)
+      .map(e => ({ value: e[def.field], daysAgo: Math.round((now - e.timestamp) / DAY) }));
+    return { goal: goalTitle(o), current: st.current, target: st.target, unit: def.unit || '', dueIn: dueLabel(o), status: st.status, history };
+  });
+
+  // Generate a note for a week+persona and persist it. All generation is
+  // user-triggered (a teacher's "View Comment" / ↻) — nothing fires on load.
+  // loadNote skips if a note is already present or in flight; refreshNote overwrites.
+  const runGenerate = (week, persona) => {
+    const key = `${week.weekStart}|${persona}`;
+    setNotes(prev => ({ ...prev, [key]: { loading: true } }));
+    const i = shown.findIndex(w => w.weekStart === week.weekStart);
+    const prior = i >= 0 ? shown.slice(i + 1) : [];
+    getReportCardNote(buildNoteContext(week, prior, goalStates), persona)
+      .then(({ text, _modelUsed }) => {
+        setNotes(prev => ({ ...prev, [key]: { text } }));
+        saveReportCardNote(user.id, week.weekStart, persona, text, _modelUsed).catch(console.error);
+      })
+      .catch(err => setNotes(prev => ({ ...prev, [key]: { error: noteError(err) } })));
+  };
+  const loadNote = (week, persona) => {
+    const cur = notesRef.current[`${week.weekStart}|${persona}`];
+    if (cur && (cur.text || cur.loading)) return;
+    runGenerate(week, persona);
+  };
+  const refreshNote = (week, persona) => runGenerate(week, persona);
 
   return (
     <AppShell apps={apps} activeApp={activeApp} onSwitch={onSwitch} accent={ACCENT} title="Report Card">
@@ -78,17 +124,23 @@ export default function ReportCardApp({ user, active, apps, activeApp, onSwitch 
           <p style={{ fontSize: 14, lineHeight: 1.6, whiteSpace: 'pre-line' }}>No report cards yet.{'\n'}Your first one posts when this week ends.</p>
         </div>
       ) : (
-        <ReportCardBody weeks={shown} />
+        <ReportCardBody weeks={shown} notes={notes} loadNote={loadNote} refreshNote={refreshNote} />
       )}
     </AppShell>
   );
+}
+
+function noteError(err) {
+  const m = (err && err.message) || '';
+  if (/api key|No API key/i.test(m)) return 'Add an AI key in Settings to get your teacher’s note.';
+  return 'Couldn’t write a note right now — tap ↻ to retry.';
 }
 
 // Swipeable stack of weekly report cards in chronological order — the most recent is
 // the last (rightmost) card and the view opens on it; swipe back (right) for older
 // weeks. Below is an at-a-glance history list (newest first); tapping a row pages the
 // carousel to that week and scrolls it into view, so the list doubles as a contents.
-function ReportCardBody({ weeks }) {
+function ReportCardBody({ weeks, notes, loadNote, refreshNote }) {
   const chrono = [...weeks].reverse(); // oldest → newest (newest last)
   const trackRef = useRef(null);
   const [active, setActive] = useState(chrono.length - 1);
@@ -120,7 +172,7 @@ function ReportCardBody({ weeks }) {
         style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
         {chrono.map(w => (
           <div key={w.weekStart} style={{ flex: '0 0 100%', scrollSnapAlign: 'center', boxSizing: 'border-box', padding: '18px 16px 4px' }}>
-            <ReportCardHero week={w} />
+            <ReportCardHero week={w} notes={notes} loadNote={loadNote} refreshNote={refreshNote} />
           </div>
         ))}
       </div>
@@ -164,28 +216,14 @@ function GradeChip({ letter }) {
   return <span style={{ minWidth: 30, textAlign: 'center', padding: '3px 7px', borderRadius: 8, background: `${c}1a`, color: c, fontWeight: 800, fontSize: 13, flexShrink: 0 }}>{letter}</span>;
 }
 
-// Just the words now — the card colour is always manila; only the handwritten grade
-// is tinted by letterColor.
-function heroCaption(letter) {
-  switch (letter && letter[0]) {
-    case 'A': return { caption: 'Outstanding week!', emoji: '🏆' };
-    case 'B': return { caption: 'Strong week!', emoji: '💪' };
-    case 'C': return { caption: 'Solid effort.', emoji: '👍' };
-    case 'D': return { caption: 'Keep pushing.', emoji: '🔥' };
-    case 'F': return { caption: 'Reset and go.', emoji: '🔄' };
-    default:  return { caption: '', emoji: '' };
-  }
-}
-
-function ReportCardHero({ week }) {
-  const t = heroCaption(week.overall && week.overall.letter);
+function ReportCardHero({ week, notes, loadNote, refreshNote }) {
   const subjects = week.items.filter(i => !i.na); // N/A subjects are hidden, not listed
   const grade = week.overall ? week.overall.letter : '—';
   const ink = week.overall ? letterColor(week.overall.letter) : '#9a8f63';
   const canShare = typeof navigator !== 'undefined' && !!navigator.share;
   const onShare = async () => {
     try {
-      await navigator.share({ title: 'My Report Card', text: `${week.label}: ${grade} overall on my NutriSnap report card ${t.emoji}` });
+      await navigator.share({ title: 'My Report Card', text: `${week.label}: ${grade} overall on my NutriSnap report card` });
     } catch { /* user dismissed */ }
   };
 
@@ -211,14 +249,22 @@ function ReportCardHero({ week }) {
       </div>
 
       {/* grade — big and bold, no circle */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0 4px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0 12px' }}>
         <div style={{ fontSize: grade.length > 1 ? 72 : 88, fontWeight: 800, color: ink, lineHeight: 1, letterSpacing: '-1px', textShadow: '0 1px 1px rgba(255,255,255,.5)' }}>{grade}</div>
-        <div style={{ marginTop: 10, fontSize: 15, fontWeight: 700, color: '#5a5238' }}>{t.emoji} {t.caption}</div>
       </div>
 
       {/* transcript */}
-      <div style={{ marginTop: 12, background: 'rgba(255,253,245,.55)', borderRadius: 12, padding: '2px 14px', border: '1px solid rgba(180,160,90,.18)' }}>
+      <div style={{ background: 'rgba(255,253,245,.55)', borderRadius: 12, padding: '2px 14px', border: '1px solid rgba(180,160,90,.18)' }}>
         {subjects.map((it, i) => <SubjectRow key={it.key} item={it} last={i === subjects.length - 1} />)}
+      </div>
+
+      {/* Comments — pick a teacher to read their take (nothing loads until asked) */}
+      <div style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '1px', color: '#8a7f55', textTransform: 'uppercase', marginBottom: 4 }}>Comments</div>
+        {TEACHERS.map(t => (
+          <TeacherRow key={t.id} teacher={t} note={notes[`${week.weekStart}|${t.id}`]}
+            onLoad={() => loadNote(week, t.id)} onRefresh={() => refreshNote(week, t.id)} />
+        ))}
       </div>
 
       {/* footer */}
@@ -305,6 +351,108 @@ function HabitDetail({ item }) {
         <span style={{ fontSize: 11, fontWeight: 700, color: met ? '#1d9e75' : '#c4631e' }}>{met ? 'OK' : 'under'}</span>
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: COMMENT_INK, marginTop: 8 }}>{summary}</div>
+    </div>
+  );
+}
+
+// --- Teachers: stylized flat-illustration avatars + the "Comments" rows ---
+// Original archetype avatars (not likenesses of any real person): a young trainer,
+// an intense coach (headband + shades + moustache), and a serene yoga instructor.
+
+function TrainerAvatar({ size = 40 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true" style={{ borderRadius: 10, display: 'block', flexShrink: 0 }}>
+      <rect width="48" height="48" rx="11" fill="#dbeafe" />
+      <rect x="20" y="35" width="8" height="7" fill="#e3b07f" />
+      <ellipse cx="24" cy="24" rx="11" ry="12" fill="#f1c693" />
+      <path d="M12.5 23 Q13 10 24 10 Q35 10 35.5 23 Q31 15.5 24 15.5 Q17 15.5 12.5 23Z" fill="#5b3a22" />
+      <rect x="17.6" y="20.6" width="4.4" height="1.5" rx="0.75" fill="#5b3a22" />
+      <rect x="26" y="20.6" width="4.4" height="1.5" rx="0.75" fill="#5b3a22" />
+      <circle cx="20" cy="24" r="1.5" fill="#2a2a2a" />
+      <circle cx="28" cy="24" r="1.5" fill="#2a2a2a" />
+      <path d="M20 29 Q24 32.5 28 29" stroke="#a9603f" strokeWidth="1.7" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CoachAvatar({ size = 40 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true" style={{ borderRadius: 10, display: 'block', flexShrink: 0 }}>
+      <rect width="48" height="48" rx="11" fill="#fde68a" />
+      <rect x="20" y="35" width="8" height="7" fill="#c98c52" />
+      <ellipse cx="24" cy="24.5" rx="11" ry="12" fill="#e0a96d" />
+      <path d="M13 22 Q13 13 24 13 Q35 13 35 22 L35 19.5 Q30 16.5 24 16.5 Q18 16.5 13 19.5Z" fill="#2f2f2f" />
+      <rect x="12" y="17.5" width="24" height="4.4" rx="1.4" fill="#e0556e" />
+      <rect x="12" y="17.5" width="24" height="1.5" rx="1" fill="#c23a54" />
+      <rect x="14.5" y="23" width="7.5" height="5.2" rx="1.6" fill="#1f1f1f" />
+      <rect x="26" y="23" width="7.5" height="5.2" rx="1.6" fill="#1f1f1f" />
+      <rect x="21.6" y="24.6" width="4.8" height="1.6" fill="#1f1f1f" />
+      <path d="M18.5 31.5 Q24 34 29.5 31.5 Q24 30.2 18.5 31.5Z" fill="#2a2a2a" />
+      <path d="M21 35 Q24 33.8 27 35" stroke="#7a3b2a" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function YogaAvatar({ size = 40 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true" style={{ borderRadius: 10, display: 'block', flexShrink: 0 }}>
+      <rect width="48" height="48" rx="11" fill="#dcfce7" />
+      <rect x="20" y="35" width="8" height="7" fill="#e3b07f" />
+      <path d="M12 27 Q12 12 24 12 Q36 12 36 27 Q36 35 32 37 L32 25 Q31 18.5 24 18.5 Q17 18.5 16 25 L16 37 Q12 35 12 27Z" fill="#4a3322" />
+      <circle cx="24" cy="9.5" r="4.2" fill="#4a3322" />
+      <ellipse cx="24" cy="25.5" rx="10.5" ry="11.5" fill="#f6cfa0" />
+      <path d="M17.8 25 Q20 27.2 22.2 25" stroke="#5a4030" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+      <path d="M25.8 25 Q28 27.2 30.2 25" stroke="#5a4030" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+      <circle cx="17.8" cy="29.5" r="1.7" fill="#f3a9b8" opacity="0.7" />
+      <circle cx="30.2" cy="29.5" r="1.7" fill="#f3a9b8" opacity="0.7" />
+      <path d="M21 30.5 Q24 33.5 27 30.5" stroke="#c46a7e" strokeWidth="1.7" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const TEACHERS = [
+  { id: 'analytical',  Avatar: TrainerAvatar },
+  { id: 'tough',       Avatar: CoachAvatar },
+  { id: 'encouraging', Avatar: YogaAvatar },
+];
+
+const teacherBtn = { border: 'none', background: ACCENT, color: '#fff', fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 999, cursor: 'pointer', flexShrink: 0 };
+const teacherIcon = { border: 'none', background: '#eceae3', color: '#777', width: 28, height: 28, borderRadius: 999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 };
+
+function TeacherRow({ teacher, note, onLoad, onRefresh }) {
+  const [open, setOpen] = useState(false);
+  const Avatar = teacher.Avatar;
+  const view = () => { setOpen(true); onLoad(); };
+  const loading = note && note.loading;
+  const text = note && note.text;
+  const error = note && note.error;
+  return (
+    <div style={{ borderTop: '1px solid rgba(150,130,70,.18)', padding: '9px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Avatar size={40} />
+        {!open ? (
+          <button onClick={view} style={teacherBtn}>View Comment</button>
+        ) : (
+          <>
+            {text && <button onClick={onRefresh} aria-label="Regenerate" style={teacherIcon}><i className="ti ti-refresh" /></button>}
+            <button onClick={() => setOpen(false)} aria-label="Hide" style={teacherIcon}><i className="ti ti-x" /></button>
+          </>
+        )}
+      </div>
+      {open && (
+        <div style={{ padding: '6px 2px 0 52px' }}>
+          {loading ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8a7f55', fontSize: 12.5 }}>
+              <span style={{ width: 13, height: 13, border: '2px solid #cdbd8a', borderTopColor: '#8a7f55', borderRadius: '50%', display: 'inline-block', animation: 'spin .8s linear infinite' }} />
+              Writing…
+            </div>
+          ) : error ? (
+            <div style={{ fontSize: 12.5, color: '#a79a6e', lineHeight: 1.5 }}>{error}</div>
+          ) : text ? (
+            <div style={{ fontSize: 13, color: '#4a4636', lineHeight: 1.55 }}>{text}</div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

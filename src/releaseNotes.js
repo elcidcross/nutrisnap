@@ -16,6 +16,7 @@ const RELEASE_NOTES = [
       'NutriSnap 2.0 — our biggest release yet. From the very start, the point of this app was never tracking for its own sake; it’s setting goals and actually reaching them. Tracking is the means, not the end — and 2.0 finally puts that front and centre.',
       'New Goals app: set an outcome with a deadline — say “16% body fat by July 14” — and see exactly how close you are, with an honest verdict when the day arrives: achieved or missed. Tap the title at the top to switch to it.',
       'New Report Card: every finished week earns a real letter grade — one for each habit (nutrition, jogging, meditation, workouts) plus an overall mark — so a single glance tells you whether you’re winning. Swipe back through past weeks, tap any subject to see exactly why you earned it, and screenshot the kind of A+ that’s worth sharing.',
+      'And the standout of 2.0 — your own AI coaches. On any Report Card, tap a teacher to get a personalized read on your week: they look at your grades, your trend, and whether you’re actually on pace for your goal, then tell you the one thing to fix next. Pick the voice that moves you — a cool-headed analyst, a tough-love trainer, or an encouraging guide.',
       'Your weekly targets now live in each activity’s “Targets” tab, with sensible defaults out of the box — so your Report Card grades you from the very first week.',
     ],
   },

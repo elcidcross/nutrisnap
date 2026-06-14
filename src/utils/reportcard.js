@@ -210,3 +210,31 @@ export function reportCardFor(weekStart, ctx) {
 
   return { weekStart, weekEnd, label: weekLabel(weekStart), range: weekRange(weekStart), items, overall };
 }
+
+// Compact, serializable summary of a week fed to the AI teacher's-note prompt. Pure
+// (the caller prepares `goals` from objectives via computeGoalState). `priorWeeks`
+// are the chronologically earlier cards (newest first); `goals` is the active
+// deadline goals with recent readings so the model can judge pace.
+export function buildNoteContext(week, priorWeeks = [], goals = []) {
+  const r = n => Math.round(Number(n));
+  const subjects = (week.items || []).filter(i => !i.na).map(i => {
+    if (i.key === 'nutrition') {
+      return {
+        subject: 'Nutrition', grade: i.letter, loggedDays: i.loggedDays,
+        perDay: (i.macros || []).map(m => ({
+          macro: m.key, avg: r(m.avg), target: r(m.target),
+          want: m.dir === 'floor' ? 'at least' : 'at most',
+        })),
+      };
+    }
+    return { subject: i.label, grade: i.letter, thisWeek: Number((+i.actual).toFixed(1)), weeklyTarget: i.target, unit: i.unit };
+  });
+  return {
+    week: week.label,
+    dates: week.range,
+    overall: week.overall ? week.overall.letter : null,
+    subjects,
+    trend: priorWeeks.filter(w => w.overall).slice(0, 4).map(w => ({ week: w.label, overall: w.overall.letter })),
+    goals,
+  };
+}

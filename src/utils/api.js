@@ -239,3 +239,31 @@ Return ONLY the recommendation text. No preamble, no markdown, no quotation mark
   });
   return { text: data.content.map(b => b.text || '').join('').trim(), gaps };
 }
+
+// The AI "teacher's note" on a weekly Report Card. `context` comes from
+// buildNoteContext (src/utils/reportcard.js); `persona` sets the tone.
+const NOTE_PERSONA = {
+  tough: 'a blunt, demanding tough-love teacher who holds the student to a high bar — call out the slacking directly, but you want them to win',
+  encouraging: 'a warm, encouraging teacher — lead with what went well, then frame the gaps gently and hopefully',
+  analytical: 'a neutral, data-driven coach — no emotion; state plainly what the numbers say and the single highest-leverage change',
+};
+const NOTE_NAME = { tough: 'the tough-love teacher', encouraging: 'the encouraging teacher', analytical: 'the analytical coach' };
+
+export async function getReportCardNote(context, persona = 'analytical') {
+  const tone = NOTE_PERSONA[persona] || NOTE_PERSONA.analytical;
+  const prompt = `You are ${tone}. You write the comment on a student's weekly health "report card".
+
+Grades run A+ (best) to F (worst). For Nutrition, each macro shows the average per logged day vs the daily target, and "want" says whether more or less is better. Activity habits show this week's total vs the weekly target. Goals carry a deadline and recent readings (value + how many days ago) so you can work out the pace.
+
+This week's data:
+${JSON.stringify(context, null, 2)}
+
+Write the comment: about 3 sentences, 50–60 words. Cover (1) how the week went against the targets, (2) if there are goals, whether the current effort is on pace to hit the goal by its deadline — do the simple math from the recent readings and say if they'll make it, (3) one specific, concrete next step. Mention the multi-week trend only if it's notable. Stay fully in character as ${NOTE_NAME[persona] || NOTE_NAME.analytical}. Return ONLY the comment text — no greeting, no markdown, no quotation marks.`;
+
+  const data = await callClaude({
+    model: getModel(),
+    max_tokens: 1024,
+    messages: [{ role: 'user', content: prompt }],
+  });
+  return { text: data.content.map(b => b.text || '').join('').trim(), _modelUsed: data._modelUsed };
+}

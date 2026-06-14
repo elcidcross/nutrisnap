@@ -1,4 +1,4 @@
-import { letterFor, gradeHabitSource, gradeNutrition, reportCardFor, weekStartOf, weekEndOf, HABIT_SOURCES } from './reportcard';
+import { letterFor, gradeHabitSource, gradeNutrition, reportCardFor, weekStartOf, weekEndOf, HABIT_SOURCES, buildNoteContext } from './reportcard';
 
 const DAY = 86400000;
 const NOW = new Date(2026, 5, 10, 12, 0, 0).getTime(); // Wed Jun 10 2026, local noon
@@ -142,6 +142,29 @@ describe('reportCardFor', () => {
   test('label is the ISO year + week number', () => {
     const card = reportCardFor(WEEK_START, { entriesByApp: {} });
     expect(card.label).toMatch(/^\d{4} Week \d{1,2}$/);
+  });
+});
+
+describe('buildNoteContext', () => {
+  test('produces a compact prompt context (subjects, trend, goals)', () => {
+    const week = reportCardFor(WEEK_START, {
+      nutritionLogs: [{ timestamp: NOW, calories: 1800, protein: 75, carbs: 180, fat: 60 }],
+      goalsHistory: GOALS_HISTORY,
+      appGoals: { jog: { weekly_distance: 10 } },
+      entriesByApp: { jog: [{ timestamp: NOW - DAY, distance: 6.4 }] },
+    });
+    const prior = [{ label: '2026 Week 23', overall: { letter: 'C' } }];
+    const goals = [{ goal: '16% body fat', current: 17.8, target: 16, unit: '%', dueIn: '30 days left', status: 'behind' }];
+
+    const out = buildNoteContext(week, prior, goals);
+    expect(out.overall).toBe(week.overall.letter);
+    const nutrition = out.subjects.find(s => s.subject === 'Nutrition');
+    expect(nutrition.perDay.find(m => m.macro === 'protein')).toMatchObject({ avg: 75, target: 150, want: 'at least' });
+    const jog = out.subjects.find(s => s.subject === 'Jogging');
+    expect(jog).toMatchObject({ thisWeek: 6.4, weeklyTarget: 10, unit: 'km' });
+    expect(out.subjects.some(s => s.na)).toBe(false); // N/A subjects excluded
+    expect(out.trend).toEqual([{ week: '2026 Week 23', overall: 'C' }]);
+    expect(out.goals).toBe(goals);
   });
 });
 
