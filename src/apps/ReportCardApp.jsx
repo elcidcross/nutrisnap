@@ -20,13 +20,11 @@ const MACRO_META = {
   fat:      { label: 'Fat',      unit: 'g' },
 };
 const round = n => Math.round(+n);
-const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
 
 // Manila-folder look: a flat, faded-yellow card with dark ink, no gradients.
 const MANILA = '#f4e8c2';
 const MANILA_EDGE = '#e3d2a2';
 const INK = '#46412f';
-const COMMENT_INK = '#a8432a'; // red-brown, for the teacher's-note comment line
 
 const DAY = 86400000;
 
@@ -144,6 +142,15 @@ function ReportCardBody({ weeks, notes, loadNote, refreshNote }) {
   const chrono = [...weeks].reverse(); // oldest → newest (newest last)
   const trackRef = useRef(null);
   const [active, setActive] = useState(chrono.length - 1);
+  const [open, setOpen] = useState({}); // `${weekStart}|${teacherId}` -> comment expanded?
+
+  // Collapse all comments when the visible card changes — otherwise a tall expanded
+  // card you swiped away from leaves a big empty gap below a shorter one.
+  useEffect(() => { setOpen({}); }, [active]);
+  const toggleComment = (week, id) => setOpen(o => {
+    const k = `${week.weekStart}|${id}`;
+    return { ...o, [k]: !o[k] };
+  });
 
   // Open on the most recent card (rightmost) without an animated scroll.
   useLayoutEffect(() => {
@@ -172,7 +179,7 @@ function ReportCardBody({ weeks, notes, loadNote, refreshNote }) {
         style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
         {chrono.map(w => (
           <div key={w.weekStart} style={{ flex: '0 0 100%', scrollSnapAlign: 'center', boxSizing: 'border-box', padding: '18px 16px 4px' }}>
-            <ReportCardHero week={w} notes={notes} loadNote={loadNote} refreshNote={refreshNote} />
+            <ReportCardHero week={w} notes={notes} loadNote={loadNote} refreshNote={refreshNote} open={open} onToggle={toggleComment} />
           </div>
         ))}
       </div>
@@ -216,16 +223,11 @@ function GradeChip({ letter }) {
   return <span style={{ minWidth: 30, textAlign: 'center', padding: '3px 7px', borderRadius: 8, background: `${c}1a`, color: c, fontWeight: 800, fontSize: 13, flexShrink: 0 }}>{letter}</span>;
 }
 
-function ReportCardHero({ week, notes, loadNote, refreshNote }) {
+function ReportCardHero({ week, notes, loadNote, refreshNote, open, onToggle }) {
+  const [info, setInfo] = useState(false);
   const subjects = week.items.filter(i => !i.na); // N/A subjects are hidden, not listed
   const grade = week.overall ? week.overall.letter : '—';
   const ink = week.overall ? letterColor(week.overall.letter) : '#9a8f63';
-  const canShare = typeof navigator !== 'undefined' && !!navigator.share;
-  const onShare = async () => {
-    try {
-      await navigator.share({ title: 'My Report Card', text: `${week.label}: ${grade} overall on my NutriSnap report card` });
-    } catch { /* user dismissed */ }
-  };
 
   return (
     <div style={{
@@ -234,18 +236,10 @@ function ReportCardHero({ week, notes, loadNote, refreshNote }) {
       boxShadow: '0 10px 26px rgba(120,100,40,.18)', padding: '22px 22px 18px',
     }}>
       {/* header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '2px', color: '#8a7f55', textTransform: 'uppercase' }}>Report Card</div>
-          <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4, color: INK }}>{week.label}</div>
-          <div style={{ fontSize: 12, color: '#9a8f63', marginTop: 1 }}>{week.range}</div>
-        </div>
-        {canShare && week.overall && (
-          <button onClick={onShare} aria-label="Share report card"
-            style={{ border: 'none', background: 'rgba(255,255,255,.5)', borderRadius: 999, width: 34, height: 34, cursor: 'pointer', color: '#8a7f55', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(120,100,40,.2)' }}>
-            <i className="ti ti-share" aria-hidden="true" />
-          </button>
-        )}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '2px', color: '#8a7f55', textTransform: 'uppercase' }}>Report Card</div>
+        <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4, color: INK }}>{week.label}</div>
+        <div style={{ fontSize: 12, color: '#9a8f63', marginTop: 1 }}>{week.range}</div>
       </div>
 
       {/* grade — big and bold, no circle */}
@@ -260,9 +254,16 @@ function ReportCardHero({ week, notes, loadNote, refreshNote }) {
 
       {/* Comments — pick a teacher to read their take (nothing loads until asked) */}
       <div style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '1px', color: '#8a7f55', textTransform: 'uppercase', marginBottom: 4 }}>Comments</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '1px', color: '#8a7f55', textTransform: 'uppercase' }}>Comments</span>
+          <button onClick={() => setInfo(true)} aria-label="How comments work"
+            style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: '#b0a070', fontSize: 14, lineHeight: 0, display: 'flex' }}>
+            <i className="ti ti-info-circle" aria-hidden="true" />
+          </button>
+        </div>
         {TEACHERS.map(t => (
           <TeacherRow key={t.id} teacher={t} note={notes[`${week.weekStart}|${t.id}`]}
+            isOpen={!!open[`${week.weekStart}|${t.id}`]} onToggle={() => onToggle(week, t.id)}
             onLoad={() => loadNote(week, t.id)} onRefresh={() => refreshNote(week, t.id)} />
         ))}
       </div>
@@ -271,6 +272,26 @@ function ReportCardHero({ week, notes, loadNote, refreshNote }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 14, color: '#a79a6e', fontSize: 11, fontWeight: 600 }}>
         <i className="ti ti-salad" aria-hidden="true" style={{ color: '#1d9e75' }} />
         NutriSnap
+      </div>
+
+      {info && <CommentsInfo onClose={() => setInfo(false)} />}
+    </div>
+  );
+}
+
+function CommentsInfo({ onClose }) {
+  return (
+    <div onClick={onClose} role="dialog" aria-modal="true" aria-label="How comments work"
+      style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 340, background: '#fff', borderRadius: 16, padding: 22, boxShadow: '0 8px 32px rgba(0,0,0,.25)' }}>
+        <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 10, color: INK }}>Your AI coaches</div>
+        <p style={{ fontSize: 13.5, color: '#555', lineHeight: 1.6, margin: 0 }}>
+          Tap a teacher to get a short, personalized take on your week. Each one reads your grades, your week-to-week trend, and your goals — then tells you the one thing to focus on next.
+        </p>
+        <p style={{ fontSize: 13.5, color: '#555', lineHeight: 1.6, margin: '10px 0 0' }}>
+          They just differ in tone: the analyst sticks to the numbers, the coach gives tough love, and the guide keeps it encouraging. Tap a teacher’s avatar to collapse their note, or ↻ for a fresh take.
+        </p>
+        <button onClick={onClose} style={{ marginTop: 18, width: '100%', padding: '11px 0', borderRadius: 10, border: 'none', background: ACCENT, color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>Got it</button>
       </div>
     </div>
   );
@@ -311,9 +332,6 @@ function SubjectDetail({ item }) {
 
 function NutritionDetail({ macros }) {
   const isOff = m => (m.dir === 'floor' ? m.avg < m.target : m.avg > m.target) && m.score < 0.999;
-  const issues = macros.filter(isOff).map(m =>
-    (m.dir === 'floor' ? 'not enough ' : 'too much ') + MACRO_META[m.key].label.toLowerCase());
-  const summary = issues.length ? cap(issues.join(', ')) : 'Everything on target 🎉';
   return (
     <div>
       <div style={{ fontSize: 10.5, color: '#b0a070', marginBottom: 6 }}>Average per logged day vs daily target</div>
@@ -329,19 +347,14 @@ function NutritionDetail({ macros }) {
           </div>
         );
       })}
-      <div style={{ fontSize: 12, fontWeight: 700, color: COMMENT_INK, marginTop: 8 }}>{summary}</div>
     </div>
   );
 }
 
 function HabitDetail({ item }) {
   const met = +item.actual >= item.target;
-  const diff = +item.actual - item.target;
   const unit = item.unit;
   const fmtN = n => (unit === 'km' ? (+n).toFixed(1) : round(n));
-  const summary = met
-    ? `Target met 🎯${diff > 0 ? ` (+${fmtN(diff)} ${unit})` : ''}`
-    : `${fmtN(-diff)} ${unit} short of target`;
   return (
     <div>
       <div style={{ fontSize: 10.5, color: '#b0a070', marginBottom: 6 }}>This week vs weekly target</div>
@@ -350,7 +363,6 @@ function HabitDetail({ item }) {
         <span style={{ fontSize: 12, color: '#a08f5e', flex: 1 }}>{fmtN(item.actual)} / {item.target} {unit}</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: met ? '#1d9e75' : '#c4631e' }}>{met ? 'OK' : 'under'}</span>
       </div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: COMMENT_INK, marginTop: 8 }}>{summary}</div>
     </div>
   );
 }
@@ -417,29 +429,24 @@ const TEACHERS = [
 ];
 
 const teacherBtn = { border: 'none', background: ACCENT, color: '#fff', fontSize: 12, fontWeight: 700, padding: '7px 14px', borderRadius: 999, cursor: 'pointer', flexShrink: 0 };
-const teacherIcon = { border: 'none', background: '#eceae3', color: '#777', width: 28, height: 28, borderRadius: 999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 };
+const inlineRefresh = { border: 'none', background: 'none', color: '#9a8f55', cursor: 'pointer', fontSize: 13, padding: '0 0 0 6px', verticalAlign: 'baseline' };
 
-function TeacherRow({ teacher, note, onLoad, onRefresh }) {
-  const [open, setOpen] = useState(false);
+function TeacherRow({ teacher, note, isOpen, onToggle, onLoad, onRefresh }) {
   const Avatar = teacher.Avatar;
-  const view = () => { setOpen(true); onLoad(); };
   const loading = note && note.loading;
   const text = note && note.text;
   const error = note && note.error;
+  const toggle = () => { if (!isOpen) onLoad(); onToggle(); };
   return (
     <div style={{ borderTop: '1px solid rgba(150,130,70,.18)', padding: '9px 0' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Avatar size={40} />
-        {!open ? (
-          <button onClick={view} style={teacherBtn}>View Comment</button>
-        ) : (
-          <>
-            {text && <button onClick={onRefresh} aria-label="Regenerate" style={teacherIcon}><i className="ti ti-refresh" /></button>}
-            <button onClick={() => setOpen(false)} aria-label="Hide" style={teacherIcon}><i className="ti ti-x" /></button>
-          </>
-        )}
+        <button onClick={toggle} aria-label={isOpen ? 'Collapse comment' : 'View comment'}
+          style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}>
+          <Avatar size={40} />
+        </button>
+        {!isOpen && <button onClick={toggle} style={teacherBtn}>View Comment</button>}
       </div>
-      {open && (
+      {isOpen && (
         <div style={{ padding: '6px 2px 0 52px' }}>
           {loading ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8a7f55', fontSize: 12.5 }}>
@@ -449,7 +456,10 @@ function TeacherRow({ teacher, note, onLoad, onRefresh }) {
           ) : error ? (
             <div style={{ fontSize: 12.5, color: '#a79a6e', lineHeight: 1.5 }}>{error}</div>
           ) : text ? (
-            <div style={{ fontSize: 13, color: '#4a4636', lineHeight: 1.55 }}>{text}</div>
+            <div style={{ fontSize: 13, color: '#4a4636', lineHeight: 1.55 }}>
+              “{text}”
+              <button onClick={onRefresh} aria-label="Regenerate" style={inlineRefresh}><i className="ti ti-refresh" /></button>
+            </div>
           ) : null}
         </div>
       )}
