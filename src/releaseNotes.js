@@ -10,6 +10,16 @@
 
 const RELEASE_NOTES = [
   {
+    version: '1.4.20',
+    date: '2026-06-14 16:30 JST',
+    notes: [
+      'The Body Report now charts all metrics — adding body water, bone mass, BMR, visceral fat and leg score alongside the existing weight, body fat and muscle charts.',
+      'Adding a new body measurement pre-fills the form with your previous reading, so you only need to change what actually shifted.',
+      'The add form now follows the Tanita DC-430A printout order and shows Japanese field names alongside English.',
+      'Bone mass and visceral fat charts use a wider y-axis so small day-to-day shifts don't look like dramatic swings.',
+    ],
+  },
+  {
     version: '1.4.19',
     date: '2026-06-09 21:15 JST',
     notes: [

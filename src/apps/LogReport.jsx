@@ -41,6 +41,15 @@ function SeriesChart({ series, entries, goal }) {
     if (!ref.current || points.length === 0) return;
     if (inst.current) inst.current.destroy();
     const isDark = matchMedia('(prefers-color-scheme:dark)').matches;
+
+    let yAxisExtra = {};
+    if (series.minRange != null && points.length > 0) {
+      const vals = points.map(p => p.v);
+      const mid = (Math.min(...vals) + Math.max(...vals)) / 2;
+      const half = Math.max((Math.max(...vals) - Math.min(...vals)) / 2, series.minRange / 2);
+      yAxisExtra = { min: Math.floor(mid - half), max: Math.ceil(mid + half) };
+    }
+
     const datasets = [{
       label: series.label,
       data: points.map(p => p.v),
@@ -63,7 +72,7 @@ function SeriesChart({ series, entries, goal }) {
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: v => `${v.dataset.label}: ${fmt(v.raw)} ${series.unit}` } } },
         scales: {
           x: { grid: { display: false }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 }, maxTicksLimit: 8, autoSkip: true } },
-          y: { grid: { color: isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)' }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 } } },
+          y: { ...yAxisExtra, grid: { color: isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)' }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 10 } } },
         },
       },
     });

@@ -95,7 +95,14 @@ export default function LogApp({ config, user, active, apps, activeApp, onSwitch
 
   const openAdd = () => {
     const draft = { when: toLocalInput(Date.now()) };
-    fields.forEach(f => { draft[f.key] = f.default ?? ''; });
+    const prev = logs.length > 0 ? logs[0] : null;
+    fields.forEach(f => {
+      if (prev != null && prev[f.key] != null && prev[f.key] !== '') {
+        draft[f.key] = f.type === 'duration' ? fmtDuration(prev[f.key]) : String(prev[f.key]);
+      } else {
+        draft[f.key] = f.default ?? '';
+      }
+    });
     setSheet({ draft });
   };
 
