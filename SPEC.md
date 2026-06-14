@@ -152,6 +152,28 @@ created_at      timestamptz default now()
 
 Indexed for case-insensitive uniqueness via `create unique index on food_library(user_id, lower(name))`. Because the index is functional, `supabase.upsert(..., { onConflict: ... })` cannot reference it; `saveFoodToLibrary` does a select-then-insert/update against `ilike` instead.
 
+### `objectives`
+
+Deadline-based achievement goals for the cross-app Goals hub (see Goals app below). Distinct from `app_goals`, which holds standing per-app target values overlaid on Report charts.
+
+```
+id          uuid primary key
+user_id     uuid
+title       text           -- optional custom label; else derived from app/metric/target
+app         text           -- source app id: 'body' | 'jog' | 'meditation' | 'workout' | 'nutrisnap'
+metric      text           -- field key: 'body_fat' | 'distance' | 'days' | 'sessions' | 'calories' ...
+type        text           -- 'reach' | 'accumulate' | 'streak'
+target      numeric        -- reach: target reading; accumulate: total per period; streak: sessions per period
+direction   text           -- reach only: 'down' | 'up' (is lower or higher the win?)
+baseline    numeric        -- reach only: metric snapshot at creation (progress denominator)
+period      text           -- accumulate/streak: 'day' | 'week' | 'month'; reach: null
+due_ts      int8           -- reach: deadline (epoch ms); recurring: null
+status      text           -- reach: 'active'|'achieved'|'missed' (latched); recurring: always 'active'
+created_at  timestamptz
+```
+
+Migration: `sql/objectives.sql`. Progress is **never stored** — it is computed live from each source app's own entries by `src/utils/goals.js`. Only the `reach` verdict latches (into `status`).
+
 ### Local-only keys (`localStorage`)
 
 | Key | Value |
@@ -213,9 +235,11 @@ Indexed for case-insensitive uniqueness via `create unique index on food_library
 - All four metrics (calories, protein, carbs, fat) are shown at once as a vertical stack of compact bar charts — there is no metric selector. Each chart has a header with the metric name (color swatch) and the period total over its target (e.g. `1500 / 2000 kcal`); the target is the daily goal summed across the period (1 day / 7 days / days-in-month), respecting goal changes per day
 - Each chart bars the metric per hour (day) or per day (week/month), with a dashed goal line reflecting the goal active on each specific day (from `goals_history`). Tooltip and units adapt per metric (`kcal` vs `g`)
 
-### Goals & Settings tab
+### Targets & Settings tab
 
-**Daily nutrition goals**
+(Tab labelled **Targets**.)
+
+**Daily nutrition targets**
 - Calories, protein, carbs, fat — each editable inline with blur-to-save
 - Each save appends a timestamped snapshot to `goals_history`
 
@@ -240,6 +264,33 @@ Indexed for case-insensitive uniqueness via `create unique index on food_library
 - Import meals from CSV (same column names; deduplicates by ID; quoted fields with commas supported)
 
 **Sign out** — clears the Supabase session.
+
+### Goals app
+
+The product's *ends*: app-measured **outcomes with a deadline** (e.g. *16% body fat by Jul 14*). Goals are sourced from **Body** metrics only (weight / body fat / muscle mass) and stored as `reach` objectives whose verdict latches to achieved/missed. The recurring *means* (habits) are **not** here — they live in each source app and are graded by the separate Report Card app.
+
+The `METRICS` catalog in `src/utils/goals.js` tags each app's fields as `kind: 'goal'` (Body) or `kind: 'habit'`; `appsWithKind('goal')`/`metricsByKind` scope the goal add sheet.
+
+**Progress engine** (`src/utils/goals.js`, pure + unit-tested in `goals.test.js`):
+- `reach` progress = `(baseline − current) / (baseline − target)` (works both directions). Status: `achieved` when the target is crossed, `missed` once the deadline passes unmet, else `onTrack`/`behind` by comparing elapsed-time to progress. The verdict is latched into `objectives.status` once decided.
+
+**UI.** Bottom nav **Active · Add · Done**. Each goal is a card (ring % + progress bar + status line, e.g. "31 days left · on track", "Achieved 🎉"). The Add/Edit sheet picks Body metric → target → due date and snapshots the current reading as `baseline`. Goals move to **Done** once latched. Writes are optimistic (`.catch(console.error)`).
+
+### Report Card app
+
+A separate app that grades each week against the **habits already defined in the other apps** plus nutrition, and rolls them into one letter grade — to make adherence a game worth acing. Read-only (no creation UI).
+
+**Where habits live.** Habits are per-app weekly targets in the `app_goals` table, set on each app's **Targets** tab: Jog's `weekly_distance`, Meditation's `weekly_days`, Workout's `weekly_sessions`. (Meditation and Workout gained a Targets tab for this.) Nutrition's "target" is the daily macro `goals`. The Report Card never defines habits itself; it reads these.
+
+**Defaults.** Each activity habit has a real default (jog 10 km, meditate 7 days, 3 workouts/week) declared both in the app's `goals` config (shown pre-filled and editable on the Targets tab) and in `HABIT_SOURCES`. The Report Card grades against the saved value if present, else the default — so every habit is graded out of the box.
+
+**Report card engine** (`src/utils/reportcard.js`, pure + unit-tested in `reportcard.test.js`):
+- Score per item = % of the weekly target met, capped at 100%, mapped to a US letter scale (`letterFor`: A+ ≥97 … D- ≥60, F <60). Overall = mean of item scores.
+- **Nutrition** is one combined grade (not four): protein is a floor (≥ target), calories/carbs/fat are ceilings (≤ target, overage penalized), averaged over the days the user actually logged. Uses the goal active each day (`goals_history`).
+- **Per-app habits** (`HABIT_SOURCES`): each app's `app_goals` target (or default) graded against the week's actual — a summed field (`distance`), a count of distinct logged days (`days`), or a count of sessions.
+- **N/A:** a habit (or nutrition) with **nothing recorded** that week is marked `na` — shown as **N/A**, not graded F, and excluded from the overall average. The overall is the mean of the graded items only; a week with nothing recorded at all has no overall and is dropped from history.
+
+**UI.** Cards are labelled by **week number** (`weekLabel` → "Week 24", ISO-8601 numbering read off the week's Thursday) with the date range as a subtitle (`weekRange`). This week's big overall grade sits above a per-habit breakdown (label · actual/target · bar · letter); each history row (last 8 weeks) is **tappable to expand** its full breakdown. Read-only, and **re-fetches on every activation** (it aggregates other apps' data, which may change mid-session).
 
 ---
 

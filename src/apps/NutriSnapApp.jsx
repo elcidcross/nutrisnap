@@ -172,7 +172,7 @@ export default function NutriSnapApp({ user, active, apps, activeApp, onSwitch }
     { id: 'log', icon: 'ti-list', label: 'Log' },
     { id: 'snap', icon: 'ti-camera', label: 'Snap', fab: true },
     { id: 'report', icon: 'ti-chart-bar', label: 'Report' },
-    { id: 'settings', icon: 'ti-target', label: 'Goals', badge: hasAlert },
+    { id: 'settings', icon: 'ti-target', label: 'Targets', badge: hasAlert },
   ];
 
   const TITLES = { log: 'NutriSnap', snap: 'Log a meal', report: 'Reports', settings: 'Goals & settings' };

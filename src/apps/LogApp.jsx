@@ -187,7 +187,7 @@ export default function LogApp({ config, user, active, apps, activeApp, onSwitch
     { id: 'list', icon: 'ti-list', label: 'Log' },
     { id: 'add', icon: 'ti-plus', label: 'Add', fab: true },
     ...(report ? [{ id: 'report', icon: 'ti-chart-line', label: 'Report' }] : []),
-    ...(goals ? [{ id: 'goals', icon: 'ti-target', label: 'Goals' }] : []),
+    ...(goals ? [{ id: 'goals', icon: 'ti-target', label: 'Targets' }] : []),
   ] : null;
 
   const shellNav = tabbed

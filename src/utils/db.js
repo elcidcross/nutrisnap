@@ -351,6 +351,67 @@ export async function saveAppGoal(userId, app, key, value) {
   if (error) throw error;
 }
 
+// Objectives — deadline-based achievement goals for the cross-app Goals hub (see
+// sql/objectives.sql). camelCase property ↔ snake_case column. The hub computes
+// live progress from each source app's own entries; only the goal definition and
+// the latched reach status live here.
+const OBJECTIVE_COLS = {
+  title: 'title',
+  app: 'app',
+  metric: 'metric',
+  type: 'type',
+  target: 'target',
+  direction: 'direction',
+  baseline: 'baseline',
+  period: 'period',
+  dueTs: 'due_ts',
+  status: 'status',
+};
+
+function rowToObjective(row) {
+  const o = { id: row.id, createdAt: row.created_at };
+  for (const [k, col] of Object.entries(OBJECTIVE_COLS)) o[k] = row[col] ?? null;
+  return o;
+}
+
+function objectiveToRow(userId, obj) {
+  const row = { user_id: userId };
+  if (obj.id) row.id = obj.id;
+  for (const [k, col] of Object.entries(OBJECTIVE_COLS)) {
+    if (obj[k] !== undefined) row[col] = obj[k] ?? null;
+  }
+  return row;
+}
+
+export async function getObjectives(userId) {
+  const { data, error } = await supabase
+    .from('objectives')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data || []).map(rowToObjective);
+}
+
+export async function addObjective(userId, obj) {
+  const { error } = await supabase.from('objectives').insert(objectiveToRow(userId, obj));
+  if (error) throw error;
+}
+
+export async function updateObjective(userId, id, updates) {
+  const row = {};
+  for (const [k, col] of Object.entries(OBJECTIVE_COLS)) {
+    if (updates[k] !== undefined) row[col] = updates[k];
+  }
+  const { error } = await supabase.from('objectives').update(row).eq('id', id).eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function deleteObjective(userId, id) {
+  const { error } = await supabase.from('objectives').delete().eq('id', id).eq('user_id', userId);
+  if (error) throw error;
+}
+
 // AI proxy performance telemetry — see sql/perf_log.sql. One row per analysis,
 // written fire-and-forget (like every other mutation here) so instrumentation
 // never blocks or breaks the user-facing flow. `perf` carries both the client's

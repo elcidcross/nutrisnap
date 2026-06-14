@@ -50,7 +50,9 @@ const CONFIG = {
     },
   },
   goals: [
-    { key: 'weekly_distance', label: 'Weekly distance', unit: 'km', placeholder: '15' },
+    // `default` is the real target used until the user changes it (graded by the
+    // Report Card out of the box) — keep in sync with HABIT_SOURCES in reportcard.js.
+    { key: 'weekly_distance', label: 'Weekly distance', unit: 'km', default: 10, placeholder: '10' },
   ],
 };
 

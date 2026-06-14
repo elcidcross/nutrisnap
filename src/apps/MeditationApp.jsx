@@ -16,6 +16,10 @@ const CONFIG = {
   create: meditations.save,
   update: meditations.update,
   remove: meditations.remove,
+  app: 'meditation',
+  goals: [
+    { key: 'weekly_days', label: 'Days per week', unit: 'days', default: 7, placeholder: '7', step: 1 },
+  ],
 };
 
 export default function MeditationApp(props) {

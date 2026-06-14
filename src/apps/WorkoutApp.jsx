@@ -20,6 +20,10 @@ const CONFIG = {
   create: workouts.save,
   update: workouts.update,
   remove: workouts.remove,
+  app: 'workout',
+  goals: [
+    { key: 'weekly_sessions', label: 'Sessions per week', unit: 'sessions', default: 3, placeholder: '3', step: 1 },
+  ],
 };
 
 export default function WorkoutApp(props) {

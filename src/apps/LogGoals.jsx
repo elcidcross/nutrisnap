@@ -5,7 +5,9 @@ import React, { useState } from 'react';
 // shared app_goals table; saved on blur (optimistically, via onSave).
 
 function GoalRow({ goal, value, onSave, accent }) {
-  const [draft, setDraft] = useState(value ?? '');
+  // Show the saved value, or the app's real default when unset — so a target is
+  // always present and editable (and graded by the Report Card) rather than blank.
+  const [draft, setDraft] = useState(value ?? goal.default ?? '');
 
   const commit = () => {
     const v = draft === '' ? null : +draft;
@@ -37,7 +39,7 @@ export default function LogGoals({ goals, values, onSave, accent }) {
   return (
     <div style={{ padding: '8px 16px 24px' }}>
       <p style={{ fontSize: 12, color: '#999', margin: '8px 0 4px', lineHeight: 1.5 }}>
-        Targets are shown on the Report charts. Leave blank to hide a goal line.
+        Your weekly targets. Graded each week on the Report Card and shown on this app's Report charts. Edit any value to change it.
       </p>
       {goals.map(g => (
         <GoalRow key={g.key} goal={g} value={(values || {})[g.key]} onSave={onSave} accent={accent} />

@@ -131,9 +131,9 @@ export default function SettingsView({ goals, notif, goalsHistory, logs, onGoalS
 
   return (
     <div style={{ paddingBottom: 32 }}>
-      {/* Goals */}
+      {/* Targets */}
       <div style={{ padding: '20px 16px 0' }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 14 }}>Daily nutrition goals</div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', letterSpacing: '.6px', marginBottom: 14 }}>Daily nutrition targets</div>
         <GoalRow color={COLORS.cal} label="Calories" field="calories" goals={goals} unit="kcal" onSave={onGoalSave} />
         <GoalRow color={COLORS.protein} label="Protein" field="protein" goals={goals} unit="g" onSave={onGoalSave} />
         <GoalRow color={COLORS.carbs} label="Carbs" field="carbs" goals={goals} unit="g" onSave={onGoalSave} />
