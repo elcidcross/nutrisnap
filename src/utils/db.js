@@ -364,6 +364,7 @@ const OBJECTIVE_COLS = {
   direction: 'direction',
   baseline: 'baseline',
   period: 'period',
+  startTs: 'start_ts',
   dueTs: 'due_ts',
   status: 'status',
 };

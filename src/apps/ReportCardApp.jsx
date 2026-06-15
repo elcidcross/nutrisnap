@@ -77,6 +77,7 @@ export default function ReportCardApp({ user, active, apps, activeApp, onSwitch 
 
   // Active deadline goals (Body metrics) with current value, status, and recent
   // readings so the note can work out whether they're on pace for the deadline.
+  const fmtDate = ts => (ts == null ? null : new Date(+ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }));
   const goalStates = (data?.objectives || []).filter(o => o.type === 'reach' && o.status === 'active').map(o => {
     const st = computeGoalState(o, data.bodyEntries || [], now);
     const def = findMetric(o.app, o.metric) || {};
@@ -84,7 +85,11 @@ export default function ReportCardApp({ user, active, apps, activeApp, onSwitch 
       .filter(e => def.field && e[def.field] != null)
       .slice(0, 5)
       .map(e => ({ value: e[def.field], daysAgo: Math.round((now - e.timestamp) / DAY) }));
-    return { goal: goalTitle(o), current: st.current, target: st.target, unit: def.unit || '', dueIn: dueLabel(o), status: st.status, history };
+    return {
+      goal: goalTitle(o), current: st.current, target: st.target, unit: def.unit || '', status: st.status, history,
+      period: { start: fmtDate(o.startTs ?? (o.createdAt ? new Date(o.createdAt).getTime() : null)), due: fmtDate(o.dueTs) },
+      dueIn: dueLabel(o),
+    };
   });
 
   // Generate a note for a week+persona and persist it. All generation is

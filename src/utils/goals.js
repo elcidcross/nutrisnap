@@ -120,11 +120,24 @@ function latestValue(entries, field) {
   return best == null ? null : Number(best[field]);
 }
 
-// Latest non-null reading of an app's metric — used to snapshot a reach goal's
-// baseline at creation, and to preview the current value in the add sheet.
+// Latest non-null reading of an app's metric — used to preview the current value in
+// the add sheet.
 export function currentReading(app, metric, entries) {
   const def = findMetric(app, metric);
   return latestValue(entries, (def && def.field) || metric);
+}
+
+// The metric's value as of `ts` (latest non-null reading on or before it) — used to
+// snapshot a reach goal's baseline at its chosen start date. Falls back to null.
+export function readingAt(app, metric, entries, ts) {
+  const def = findMetric(app, metric);
+  const field = (def && def.field) || metric;
+  let best = null;
+  for (const e of entries) {
+    if (e[field] == null || e.timestamp > ts) continue;
+    if (best == null || e.timestamp > best.timestamp) best = e;
+  }
+  return best == null ? null : Number(best[field]);
 }
 
 function clamp01(x) {
@@ -162,7 +175,9 @@ function reachState(o, entries, now) {
   if (o.status === 'achieved' || hit) status = 'achieved';
   else if (o.status === 'missed' || past) status = 'missed';
   else {
-    const elapsed = elapsedFraction(new Date(o.createdAt).getTime(), o.dueTs, now);
+    // Pace runs from the chosen start date (falling back to when the goal was made).
+    const start = o.startTs != null ? Number(o.startTs) : new Date(o.createdAt).getTime();
+    const elapsed = elapsedFraction(start, o.dueTs, now);
     status = pct >= elapsed ? 'onTrack' : 'behind';
   }
 

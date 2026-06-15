@@ -253,12 +253,14 @@ export async function getReportCardNote(context, persona = 'analytical') {
   const tone = NOTE_PERSONA[persona] || NOTE_PERSONA.analytical;
   const prompt = `You are ${tone}. You write the comment on a student's weekly health "report card".
 
-Grades run A+ (best) to F (worst). For Nutrition, each macro shows the average per logged day vs the daily target, and "want" says whether more or less is better. Activity habits show this week's total vs the weekly target. Goals carry a deadline and recent readings (value + how many days ago) so you can work out the pace.
+Grades run A+ (best) to F (worst). For Nutrition, each macro shows the average per logged day vs the daily target, and "want" says whether more or less is better. Activity habits show this week's total vs the weekly target.
+
+This report card covers ONE week — the report-card period, given by "week" and "dates". Each goal has its own period (period.start → period.due) plus recent readings (value + days ago). Use both: see where this week sits inside the goal's timeline, and work out from the readings whether they're on pace to hit the goal by its due date.
 
 This week's data:
 ${JSON.stringify(context, null, 2)}
 
-Write the comment: about 3 sentences, 50–60 words. Cover (1) how the week went against the targets, (2) if there are goals, whether the current effort is on pace to hit the goal by its deadline — do the simple math from the recent readings and say if they'll make it, (3) one specific, concrete next step. Mention the multi-week trend only if it's notable. Stay fully in character as ${NOTE_NAME[persona] || NOTE_NAME.analytical}. Return ONLY the comment text — no greeting, no markdown, no quotation marks.`;
+Write the comment: about 3 sentences, 50–60 words. Cover (1) how the week went against the targets, (2) if there are goals, whether the pace from the readings will hit the goal by its due date — do the simple math and say if they'll make it, (3) one specific, concrete next step. Mention the multi-week trend only if it's notable. Stay fully in character as ${NOTE_NAME[persona] || NOTE_NAME.analytical}. Return ONLY the comment text — no greeting, no markdown, no quotation marks.`;
 
   const data = await callClaude({
     model: getModel(),

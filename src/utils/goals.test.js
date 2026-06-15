@@ -1,4 +1,4 @@
-import { computeGoalState, goalTitle, aggregate, periodStart, periodEnd } from './goals';
+import { computeGoalState, goalTitle, aggregate, periodStart, periodEnd, readingAt } from './goals';
 
 const DAY = 86400000;
 // Fixed reference instant: Wed Jun 10 2026, local noon. Using local-noon offsets
@@ -43,6 +43,32 @@ describe('reach goals', () => {
   test('honors a persisted (already latched) status', () => {
     const s = computeGoalState({ ...base, status: 'missed' }, entries, NOW);
     expect(s.status).toBe('missed');
+  });
+});
+
+describe('reach goals — start date', () => {
+  const body = [
+    { id: 'b0', timestamp: NOW - 40 * DAY, bodyFat: 22 },
+    { id: 'b1', timestamp: NOW - 10 * DAY, bodyFat: 20 },
+    { id: 'b2', timestamp: NOW, bodyFat: 18 },
+  ];
+
+  test('readingAt snapshots the value as of a date', () => {
+    expect(readingAt('body', 'body_fat', body, NOW - 30 * DAY)).toBe(22); // only b0 is on/before
+    expect(readingAt('body', 'body_fat', body, NOW)).toBe(18);
+  });
+
+  test('pace is measured from startTs, not createdAt', () => {
+    const base = {
+      id: 'g', app: 'body', metric: 'body_fat', type: 'reach', target: 16, direction: 'down',
+      baseline: 22, status: 'active', createdAt: new Date(NOW - 2 * DAY).toISOString(),
+      dueTs: NOW + 10 * DAY,
+    };
+    // current 18; progress = (22-18)/(22-16) = 0.667.
+    // start 40d ago → elapsed = 40/50 = 0.8 > 0.667 → behind.
+    expect(computeGoalState({ ...base, startTs: NOW - 40 * DAY }, body, NOW).status).toBe('behind');
+    // start 5d ago → elapsed = 5/15 = 0.33 < 0.667 → on track.
+    expect(computeGoalState({ ...base, startTs: NOW - 5 * DAY }, body, NOW).status).toBe('onTrack');
   });
 });
 

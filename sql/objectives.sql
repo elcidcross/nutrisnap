@@ -26,12 +26,16 @@ create table if not exists public.objectives (
   type       text not null,         -- 'reach' | 'accumulate' | 'streak'
   target     numeric not null,      -- reach: target reading; accumulate: total per period; streak: sessions per period
   direction  text,                  -- reach only: 'down' | 'up' (is lower or higher the win?)
-  baseline   numeric,               -- reach only: metric snapshot at creation (progress denominator)
+  baseline   numeric,               -- reach only: metric snapshot at the start date (progress denominator)
   period     text,                  -- accumulate/streak: 'day' | 'week' | 'month'; reach: null
+  start_ts   int8,                  -- reach: chosen start date (epoch ms); pace is measured start → due
   due_ts     int8,                  -- reach: deadline (epoch ms); recurring: null
   status     text not null default 'active', -- reach: 'active'|'achieved'|'missed'; recurring: always 'active'
   created_at timestamptz not null default now()
 );
+
+-- For deployments created before start_ts existed.
+alter table public.objectives add column if not exists start_ts int8;
 
 create index if not exists objectives_user_idx
   on public.objectives (user_id);

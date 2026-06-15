@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AppShell from '../components/AppShell';
 import { getObjectives, addObjective, updateObjective, deleteObjective, getBodyMetrics } from '../utils/db';
-import { appsWithKind, metricsByKind, findMetric, computeGoalState, goalTitle, dueLabel, currentReading } from '../utils/goals';
+import { appsWithKind, metricsByKind, findMetric, computeGoalState, goalTitle, dueLabel, currentReading, readingAt } from '../utils/goals';
 
 // The Goals app holds the *ends*: app-measured outcomes with a deadline (e.g. 16%
 // body fat by Jul 14), sourced from Body metrics. The *means* — recurring habits
@@ -29,6 +29,11 @@ function toDateInput(ts) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 const dueFromDate = str => (str ? new Date(`${str}T23:59:00`).getTime() : null);
+const startFromDate = str => (str ? new Date(`${str}T00:00:00`).getTime() : null);
+// The metric value to lock in as the starting point: the reading at the chosen start
+// date, falling back to the latest reading.
+const baselineFor = (app, metric, entries, startTs) =>
+  (startTs != null ? readingAt(app, metric, entries, startTs) : null) ?? currentReading(app, metric, entries);
 
 export default function GoalsApp({ user, active, apps, activeApp, onSwitch }) {
   const [objectives, setObjectives] = useState([]);
@@ -77,12 +82,13 @@ export default function GoalsApp({ user, active, apps, activeApp, onSwitch }) {
   const openAdd = () => {
     const app = appsWithKind('goal')[0];
     const m = metricsByKind(app, 'goal')[0];
-    setSheet({ draft: { title: '', app, metric: m.metric, target: '', dueDate: toDateInput(Date.now() + 30 * 86400000) } });
+    setSheet({ draft: { title: '', app, metric: m.metric, target: '', startDate: toDateInput(Date.now()), dueDate: toDateInput(Date.now() + 30 * 86400000) } });
   };
   const openEdit = (o) => {
     setSheet({ id: o.id, draft: {
       title: o.title || '', app: o.app, metric: o.metric,
       target: o.target == null ? '' : String(o.target),
+      startDate: toDateInput(o.startTs ?? (o.createdAt ? new Date(o.createdAt).getTime() : Date.now())),
       dueDate: o.dueTs ? toDateInput(o.dueTs) : toDateInput(Date.now() + 30 * 86400000),
     } });
   };
@@ -92,11 +98,12 @@ export default function GoalsApp({ user, active, apps, activeApp, onSwitch }) {
     const def = findMetric(d.app, d.metric);
     const target = d.target === '' ? null : +d.target;
     if (!target) return;
+    const startTs = startFromDate(d.startDate);
     const fields = {
       title: d.title.trim() || null, app: d.app, metric: d.metric, type: 'reach', target,
       direction: def && def.lowerBetter ? 'down' : 'up',
-      period: null, dueTs: dueFromDate(d.dueDate),
-      baseline: currentReading(d.app, d.metric, bodyEntries),
+      period: null, startTs, dueTs: dueFromDate(d.dueDate),
+      baseline: baselineFor(d.app, d.metric, bodyEntries, startTs),
     };
     if (sheet.id) {
       setObjectives(p => p.map(o => o.id === sheet.id ? { ...o, ...fields } : o));
@@ -239,7 +246,7 @@ function GoalSheet({ sheet, editing, patch, bodyEntries, onSave, onClose }) {
 
   const changeApp = (app) => patch({ app, metric: metricsByKind(app, 'goal')[0].metric });
   const preview = goalTitle({ title: d.title.trim() || null, app: d.app, metric: d.metric, type: 'reach', target: d.target || 0 });
-  const currentVal = currentReading(d.app, d.metric, bodyEntries);
+  const baselineVal = baselineFor(d.app, d.metric, bodyEntries, startFromDate(d.startDate));
 
   const label = txt => <div style={{ fontSize: 10, color: '#888', fontWeight: 700, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '.5px' }}>{txt}</div>;
   const selectStyle = { ...inputStyle, appearance: 'none', WebkitAppearance: 'none', paddingRight: 8 };
@@ -269,8 +276,8 @@ function GoalSheet({ sheet, editing, patch, bodyEntries, onSave, onClose }) {
 
         <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
           <div style={{ flex: 1 }}>
-            {label(`Target${def ? ` (${def.unit})` : ''}`)}
-            <input type="number" inputMode="decimal" min={0} step={0.1} value={d.target} placeholder="target value" onChange={e => patch({ target: e.target.value })} style={inputStyle} />
+            {label('Start date')}
+            <input type="date" value={d.startDate} onChange={e => patch({ startDate: e.target.value })} style={inputStyle} />
           </div>
           <div style={{ flex: 1 }}>
             {label('Due date')}
@@ -278,9 +285,14 @@ function GoalSheet({ sheet, editing, patch, bodyEntries, onSave, onClose }) {
           </div>
         </div>
 
+        <div style={{ marginBottom: 16 }}>
+          {label(`Target${def ? ` (${def.unit})` : ''}`)}
+          <input type="number" inputMode="decimal" min={0} step={0.1} value={d.target} placeholder="target value" onChange={e => patch({ target: e.target.value })} style={inputStyle} />
+        </div>
+
         <div style={{ fontSize: 11, color: '#999', marginBottom: 16, lineHeight: 1.5 }}>
           {def && def.lowerBetter ? 'Lower is the win. ' : 'Higher is the win. '}
-          Current: <strong>{fmt(currentVal)}{def ? ` ${def.unit}` : ''}</strong> — saved as the starting point.
+          Starting point (at start date): <strong>{fmt(baselineVal)}{def ? ` ${def.unit}` : ''}</strong>.
         </div>
 
         <div style={{ marginBottom: 20 }}>

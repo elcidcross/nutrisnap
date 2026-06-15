@@ -10,6 +10,14 @@
 
 const RELEASE_NOTES = [
   {
+    version: '2.1.0',
+    date: '2026-06-15 11:54 JST',
+    notes: [
+      'Goals now have a start date. Set when a goal actually began and NutriSnap locks in your starting point and measures pace from there — so a goal you backdate is judged from the right moment, not from whenever you happened to add it.',
+      'Your AI coaches got sharper about timing: they now see each goal’s full timeline and where the current week falls within it, so their read on whether you’ll hit the target by the deadline is more accurate.',
+    ],
+  },
+  {
     version: '2.0.0',
     date: '2026-06-14 23:30 JST',
     notes: [
