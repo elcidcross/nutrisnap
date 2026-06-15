@@ -195,12 +195,8 @@ function GoalCard({ card, onEdit, onDelete }) {
         <div style={{ fontSize: 11, fontWeight: 600, color: line.color }}>{line.text}</div>
       </div>
 
-      <PercentRing size={54} pct={st.pct} color={ringColor} />
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
-        <button onClick={onEdit} aria-label="Edit goal" style={iconBtn}><i className="ti ti-pencil" /></button>
-        <button onClick={() => setConfirming(true)} aria-label="Delete goal" style={iconBtn}><i className="ti ti-trash" /></button>
-      </div>
+      <button onClick={onEdit} aria-label="Edit goal" style={iconBtn}><i className="ti ti-pencil" /></button>
+      <button onClick={() => setConfirming(true)} aria-label="Delete goal" style={iconBtn}><i className="ti ti-trash" /></button>
 
       {confirming && (
         <div onClick={() => setConfirming(false)} role="dialog" aria-modal="true" aria-label="Confirm delete"
@@ -219,22 +215,7 @@ function GoalCard({ card, onEdit, onDelete }) {
   );
 }
 
-const iconBtn = { background: 'none', border: 'none', color: '#ccc', fontSize: 16, padding: 3, cursor: 'pointer' };
-
-function PercentRing({ size, pct, color }) {
-  const r = size / 2 - 4;
-  const circ = 2 * Math.PI * r;
-  const dash = Math.max(0, Math.min(1, pct)) * circ;
-  return (
-    <svg width={size} height={size} style={{ flexShrink: 0 }} aria-hidden="true">
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e8e8e4" strokeWidth={5} />
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={5}
-        strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={circ / 4} strokeLinecap="round"
-        style={{ transition: 'stroke-dasharray .5s ease' }} />
-      <text x={size / 2} y={size / 2 + 4} textAnchor="middle" fontSize="13" fontWeight="700" fill={color}>{Math.round(pct * 100)}%</text>
-    </svg>
-  );
-}
+const iconBtn = { background: 'none', border: 'none', color: '#ccc', fontSize: 17, padding: 4, flexShrink: 0, cursor: 'pointer' };
 
 // --- Add / edit sheet (goals only) ---
 

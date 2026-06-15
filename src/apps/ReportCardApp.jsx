@@ -441,31 +441,32 @@ function TeacherRow({ teacher, note, isOpen, onToggle, onLoad, onRefresh }) {
   const error = note && note.error;
   const toggle = () => { if (!isOpen) onLoad(); onToggle(); };
   return (
-    <div style={{ borderTop: '1px solid rgba(150,130,70,.18)', padding: '3px 0 8px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+    <div style={{ borderTop: '1px solid rgba(150,130,70,.18)', padding: '8px 0' }}>
+      <div style={{ display: 'flex', alignItems: isOpen ? 'flex-start' : 'center', gap: 12 }}>
         <button onClick={toggle} aria-label={isOpen ? 'Collapse comment' : 'View comment'}
-          style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}>
+          style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', lineHeight: 0, flexShrink: 0 }}>
           <Avatar size={40} />
         </button>
-        {!isOpen && <button onClick={toggle} style={teacherBtn}>View Comment</button>}
+        {!isOpen ? (
+          <button onClick={toggle} style={teacherBtn}>View Comment</button>
+        ) : (
+          <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+            {loading ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8a7f55', fontSize: 12.5 }}>
+                <span style={{ width: 13, height: 13, border: '2px solid #cdbd8a', borderTopColor: '#8a7f55', borderRadius: '50%', display: 'inline-block', animation: 'spin .8s linear infinite' }} />
+                Writing…
+              </div>
+            ) : error ? (
+              <div style={{ fontSize: 12.5, color: '#a79a6e', lineHeight: 1.5 }}>{error}</div>
+            ) : text ? (
+              <div style={{ fontSize: 13, color: '#4a4636', lineHeight: 1.55 }}>
+                “{text}”
+                <button onClick={onRefresh} aria-label="Regenerate" style={inlineRefresh}><i className="ti ti-refresh" /></button>
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
-      {isOpen && (
-        <div style={{ padding: '6px 2px 0 52px' }}>
-          {loading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#8a7f55', fontSize: 12.5 }}>
-              <span style={{ width: 13, height: 13, border: '2px solid #cdbd8a', borderTopColor: '#8a7f55', borderRadius: '50%', display: 'inline-block', animation: 'spin .8s linear infinite' }} />
-              Writing…
-            </div>
-          ) : error ? (
-            <div style={{ fontSize: 12.5, color: '#a79a6e', lineHeight: 1.5 }}>{error}</div>
-          ) : text ? (
-            <div style={{ fontSize: 13, color: '#4a4636', lineHeight: 1.55 }}>
-              “{text}”
-              <button onClick={onRefresh} aria-label="Regenerate" style={inlineRefresh}><i className="ti ti-refresh" /></button>
-            </div>
-          ) : null}
-        </div>
-      )}
     </div>
   );
 }
