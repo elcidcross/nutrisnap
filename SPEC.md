@@ -274,7 +274,7 @@ The `METRICS` catalog in `src/utils/goals.js` tags each app's fields as `kind: '
 **Progress engine** (`src/utils/goals.js`, pure + unit-tested in `goals.test.js`):
 - `reach` progress = `(baseline − current) / (baseline − target)` (works both directions). Status: `achieved` when the target is crossed, `missed` once the deadline passes unmet, else `onTrack`/`behind` by comparing elapsed-time to progress. The verdict is latched into `objectives.status` once decided.
 
-**UI.** Bottom nav **Active · Add · Done**. Each goal is a card (ring % + progress bar + status line, e.g. "31 days left · on track", "Achieved 🎉"). The Add/Edit sheet picks Body metric → target → due date and snapshots the current reading as `baseline`. Goals move to **Done** once latched. Writes are optimistic (`.catch(console.error)`).
+**UI.** Bottom nav **Active · Add · Done**. Each goal is a card: a progress bar with a **pace marker** (a tick at the elapsed-time fraction `pace` — "where you should be by now", so ahead/behind is visible at a glance), plus a status line (e.g. "31 days left · on track", "Achieved 🎉"). Tapping an active reach card **expands** it to a trajectory sparkline (real readings start→now, dashed target line, faint projection to the deadline) and a stats row (baseline · now · projected · rate/wk · days left), built from the pure `reachTrajectory` (`src/utils/goals.js`) and Chart.js. The Add/Edit sheet picks Body metric → target → due date and snapshots the current reading as `baseline`. Goals move to **Done** once latched. Writes are optimistic (`.catch(console.error)`).
 
 ### Report Card app
 

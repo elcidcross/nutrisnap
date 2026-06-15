@@ -1,7 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import AppShell from '../components/AppShell';
 import { getObjectives, addObjective, updateObjective, deleteObjective, getBodyMetrics } from '../utils/db';
-import { appsWithKind, metricsByKind, findMetric, computeGoalState, goalTitle, dueLabel, currentReading, readingAt } from '../utils/goals';
+import { Chart, registerables } from 'chart.js';
+import { appsWithKind, metricsByKind, findMetric, computeGoalState, goalTitle, dueLabel, currentReading, readingAt, reachTrajectory } from '../utils/goals';
+
+Chart.register(...registerables);
 
 // The Goals app holds the *ends*: app-measured outcomes with a deadline (e.g. 16%
 // body fat by Jul 14), sourced from Body metrics. The *means* — recurring habits
@@ -143,7 +146,7 @@ export default function GoalsApp({ user, active, apps, activeApp, onSwitch }) {
       </div>
     );
   } else {
-    content = shown.map(c => <GoalCard key={c.o.id} card={c} onEdit={() => openEdit(c.o)} onDelete={del} />);
+    content = shown.map(c => <GoalCard key={c.o.id} card={c} entries={bodyEntries} onEdit={() => openEdit(c.o)} onDelete={del} />);
   }
 
   const tabs = [
@@ -172,25 +175,41 @@ function statusLine(o, st) {
   return { text: `${dueLabel(o)} · ${st.status === 'behind' ? 'behind' : 'on track'}`, color: st.status === 'behind' ? '#ba7517' : '#888' };
 }
 
-function GoalCard({ card, onEdit, onDelete }) {
+function GoalCard({ card, entries = [], onEdit, onDelete }) {
   const { o, st, meta } = card;
   const [confirming, setConfirming] = useState(false);
+  const [open, setOpen] = useState(false);
   const line = statusLine(o, st);
   const def = findMetric(o.app, o.metric) || { unit: '' };
   const ringColor = st.done ? (st.status === 'achieved' ? '#1d9e75' : '#cbb8b0') : meta.accent;
+  const showPace = st.pace != null && !st.done;
+
+  // Expandable only for active reach goals with a deadline and at least one reading.
+  const traj = (!st.done && o.type === 'reach' && o.dueTs != null) ? reachTrajectory(o, entries) : null;
+  const canExpand = !!(traj && traj.points.length >= 1);
 
   return (
-    <div style={{ padding: '16px', borderBottom: '0.5px solid rgba(0,0,0,.07)', display: 'flex', gap: 14, alignItems: 'center' }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
+    <div style={{ borderBottom: '0.5px solid rgba(0,0,0,.07)' }}>
+    <div style={{ padding: '16px', display: 'flex', gap: 14, alignItems: 'center' }}>
+      <div
+        onClick={canExpand ? () => setOpen(v => !v) : undefined}
+        role={canExpand ? 'button' : undefined}
+        aria-expanded={canExpand ? open : undefined}
+        style={{ flex: 1, minWidth: 0, cursor: canExpand ? 'pointer' : 'default' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
           <span style={{ width: 26, height: 26, borderRadius: 7, background: `${meta.accent}18`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <i className={`ti ${meta.icon}`} style={{ fontSize: 15, color: meta.accent }} aria-hidden="true" />
           </span>
-          <span style={{ fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{goalTitle(o)}</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{goalTitle(o)}</span>
+          {canExpand && <i className={`ti ti-chevron-${open ? 'up' : 'down'}`} style={{ fontSize: 14, color: '#ccc', flexShrink: 0 }} aria-hidden="true" />}
         </div>
         <div style={{ fontSize: 12, color: '#666', marginBottom: 7 }}>{`${fmt(st.current)} → ${fmt(st.target)} ${def.unit}`.trim()}</div>
-        <div style={{ height: 7, borderRadius: 4, background: '#e8e8e4', overflow: 'hidden', marginBottom: 6 }}>
+        <div style={{ position: 'relative', height: 7, borderRadius: 4, background: '#e8e8e4', overflow: 'hidden', marginBottom: 6 }}>
           <div style={{ height: '100%', borderRadius: 4, background: ringColor, width: `${Math.round(st.pct * 100)}%`, transition: 'width .4s ease' }} />
+          {showPace && (
+            <div title="Where you should be by now"
+              style={{ position: 'absolute', top: -1, bottom: -1, left: `${Math.round(st.pace * 100)}%`, width: 2, marginLeft: -1, background: 'rgba(0,0,0,.55)', borderRadius: 1 }} />
+          )}
         </div>
         <div style={{ fontSize: 11, fontWeight: 600, color: line.color }}>{line.text}</div>
       </div>
@@ -212,7 +231,87 @@ function GoalCard({ card, onEdit, onDelete }) {
         </div>
       )}
     </div>
+
+    {open && canExpand && <GoalDetail traj={traj} accent={meta.accent} unit={def.unit} down={o.direction === 'down'} />}
+    </div>
   );
+}
+
+// Expanded trajectory: a sparkline of real readings toward the target line, plus a
+// compact stats row. `traj` comes from reachTrajectory (pure).
+function GoalDetail({ traj, accent, unit, down }) {
+  const meets = traj.projected == null ? null : (down ? traj.projected <= traj.target : traj.projected >= traj.target);
+  const projColor = meets == null ? '#444' : (meets ? '#1d9e75' : '#e24b4a');
+  const rate = traj.ratePerWeek;
+  const rateStr = rate == null ? '—' : `${rate > 0 ? '+' : ''}${fmt(rate)}`;
+  return (
+    <div style={{ padding: '0 16px 16px' }}>
+      {traj.points.length >= 2 && <div style={{ height: 120, marginBottom: 10 }}><GoalChart traj={traj} accent={accent} unit={unit} /></div>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 18px', fontSize: 11 }}>
+        <Stat label="Baseline" value={`${fmt(traj.baseline)} ${unit}`.trim()} />
+        <Stat label="Now" value={`${fmt(traj.current)} ${unit}`.trim()} />
+        <Stat label="Projected" value={`${fmt(traj.projected)} ${unit}`.trim()} color={projColor} />
+        <Stat label="Rate/wk" value={`${rateStr} ${unit}`.trim()} />
+        <Stat label="Days left" value={traj.daysLeft == null ? '—' : String(traj.daysLeft)} />
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, color }) {
+  return (
+    <div>
+      <div style={{ color: '#aaa', fontWeight: 600, marginBottom: 1 }}>{label}</div>
+      <div style={{ color: color || '#444', fontWeight: 700, fontSize: 12 }}>{value}</div>
+    </div>
+  );
+}
+
+const shortDate = ts => new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+function GoalChart({ traj, accent, unit }) {
+  const ref = useRef(null);
+  const inst = useRef(null);
+
+  useEffect(() => {
+    if (!ref.current || traj.points.length < 2) return;
+    if (inst.current) inst.current.destroy();
+    const isDark = matchMedia('(prefers-color-scheme:dark)').matches;
+
+    // x is time (ms) so the projection point lands at the deadline, proportionally.
+    const reading = traj.points.map(p => ({ x: p.ts, y: p.v }));
+    const last = traj.points[traj.points.length - 1];
+    const datasets = [{
+      label: 'Reading', data: reading, parsing: false,
+      borderColor: accent, backgroundColor: `${accent}1f`,
+      borderWidth: 2, pointRadius: 3, pointBackgroundColor: accent, tension: 0.25, fill: true,
+    }, {
+      label: 'Target', data: [{ x: traj.points[0].ts, y: traj.target }, { x: traj.due, y: traj.target }],
+      parsing: false, borderColor: 'rgba(150,150,150,.7)', borderDash: [5, 3], borderWidth: 1.5, pointRadius: 0, fill: false,
+    }];
+    if (traj.projected != null && traj.due != null) {
+      datasets.push({
+        label: 'Projected', data: [{ x: last.ts, y: last.v }, { x: traj.due, y: traj.projected }],
+        parsing: false, borderColor: accent, borderDash: [3, 3], borderWidth: 1.5,
+        pointRadius: [0, 4], pointStyle: 'circle', pointBackgroundColor: `${accent}99`, fill: false,
+      });
+    }
+    inst.current = new Chart(ref.current, {
+      type: 'line',
+      data: { datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: v => `${v.dataset.label}: ${fmt(v.parsed.y)} ${unit}`.trim() } } },
+        scales: {
+          x: { type: 'linear', grid: { display: false }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 9 }, maxTicksLimit: 5, callback: v => shortDate(v) } },
+          y: { grid: { color: isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.05)' }, ticks: { color: isDark ? '#666' : '#aaa', font: { size: 9 } } },
+        },
+      },
+    });
+    return () => { if (inst.current) inst.current.destroy(); };
+  }, [traj, accent, unit]);
+
+  return <canvas ref={ref} />;
 }
 
 const iconBtn = { background: 'none', border: 'none', color: '#ccc', fontSize: 17, padding: 4, flexShrink: 0, cursor: 'pointer' };

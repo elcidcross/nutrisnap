@@ -1,4 +1,4 @@
-import { computeGoalState, goalTitle, aggregate, periodStart, periodEnd, readingAt } from './goals';
+import { computeGoalState, goalTitle, aggregate, periodStart, periodEnd, readingAt, reachTrajectory } from './goals';
 
 const DAY = 86400000;
 // Fixed reference instant: Wed Jun 10 2026, local noon. Using local-noon offsets
@@ -69,6 +69,46 @@ describe('reach goals — start date', () => {
     expect(computeGoalState({ ...base, startTs: NOW - 40 * DAY }, body, NOW).status).toBe('behind');
     // start 5d ago → elapsed = 5/15 = 0.33 < 0.667 → on track.
     expect(computeGoalState({ ...base, startTs: NOW - 5 * DAY }, body, NOW).status).toBe('onTrack');
+  });
+
+  test('pace is the elapsed-time fraction from startTs', () => {
+    const base = {
+      id: 'g', app: 'body', metric: 'body_fat', type: 'reach', target: 16, direction: 'down',
+      baseline: 22, status: 'active', createdAt: new Date(NOW - 2 * DAY).toISOString(),
+      dueTs: NOW + 10 * DAY,
+    };
+    // start 40d ago, due 10d out → elapsed = 40/50 = 0.8.
+    expect(computeGoalState({ ...base, startTs: NOW - 40 * DAY }, body, NOW).pace).toBeCloseTo(0.8, 5);
+  });
+});
+
+describe('reachTrajectory', () => {
+  const base = {
+    id: 'g', app: 'body', metric: 'body_fat', type: 'reach', target: 16, direction: 'down',
+    baseline: 22, status: 'active', createdAt: new Date(NOW - 50 * DAY).toISOString(),
+    startTs: NOW - 40 * DAY, dueTs: NOW + 10 * DAY,
+  };
+  // 22 → 20 → 18 over the window, plus one pre-start reading that must be excluded.
+  const body = [
+    { id: 'b-old', timestamp: NOW - 60 * DAY, bodyFat: 25 },
+    { id: 'b2', timestamp: NOW, bodyFat: 18 },
+    { id: 'b1', timestamp: NOW - 20 * DAY, bodyFat: 20 },
+    { id: 'b0', timestamp: NOW - 40 * DAY, bodyFat: 22 },
+  ];
+
+  test('returns in-window readings sorted ascending and a linear projection', () => {
+    const t = reachTrajectory(base, body, NOW);
+    expect(t.points.map(p => p.v)).toEqual([22, 20, 18]); // pre-start 25 excluded, sorted
+    expect(t.current).toBe(18);
+    expect(t.baseline).toBe(22);
+    // baseline→current is -4 over 40d; 10 more days → -1 → projected 17.
+    expect(t.projected).toBeCloseTo(17, 5);
+    expect(t.daysLeft).toBe(10);
+  });
+
+  test('projection is null with fewer than two in-window readings', () => {
+    const one = [{ id: 'b', timestamp: NOW, bodyFat: 18 }];
+    expect(reachTrajectory(base, one, NOW).projected).toBe(null);
   });
 });
 

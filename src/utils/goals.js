@@ -171,17 +171,57 @@ function reachState(o, entries, now) {
   const hit = current != null && (down ? current <= target : current >= target);
   const past = o.dueTs != null && now >= o.dueTs;
 
+  // Pace runs from the chosen start date (falling back to when the goal was made).
+  // `pace` is the time-elapsed fraction (0–1) — where progress "should be" by now;
+  // the card draws it as a marker on the bar so behind/ahead is visible at a glance.
+  const start = reachStart(o);
+  const pace = o.dueTs == null ? null : elapsedFraction(start, o.dueTs, now);
+
   let status;
   if (o.status === 'achieved' || hit) status = 'achieved';
   else if (o.status === 'missed' || past) status = 'missed';
-  else {
-    // Pace runs from the chosen start date (falling back to when the goal was made).
-    const start = o.startTs != null ? Number(o.startTs) : new Date(o.createdAt).getTime();
-    const elapsed = elapsedFraction(start, o.dueTs, now);
-    status = pct >= elapsed ? 'onTrack' : 'behind';
+  else status = pct >= pace ? 'onTrack' : 'behind';
+
+  return { type: 'reach', current, target, baseline, pct, pace, status, done: status === 'achieved' || status === 'missed' };
+}
+
+// A reach goal's pace start: the chosen start date, else when the goal was created.
+function reachStart(o) {
+  return o.startTs != null ? Number(o.startTs) : new Date(o.createdAt).getTime();
+}
+
+// Trajectory data for a reach goal's expanded chart + stats — pure (no React/Chart.js).
+// `points` are the in-window readings (start→now) sorted ascending; `projected` is a
+// linear extrapolation of baseline→current carried to the deadline.
+export function reachTrajectory(o, entries = [], now = Date.now()) {
+  const def = findMetric(o.app, o.metric);
+  const field = (def && def.field) || o.metric;
+  const start = reachStart(o);
+  const due = o.dueTs == null ? null : Number(o.dueTs);
+  const baseline = o.baseline == null ? null : Number(o.baseline);
+  const target = Number(o.target);
+
+  const points = entries
+    .filter(e => e[field] != null && e.timestamp >= start)
+    .map(e => ({ ts: e.timestamp, v: Number(e[field]) }))
+    .sort((a, b) => a.ts - b.ts);
+
+  const current = points.length ? points[points.length - 1].v : latestValue(entries, field);
+  const from = baseline != null ? baseline : (points.length ? points[0].v : null);
+
+  let ratePerWeek = null;
+  let projected = null;
+  if (from != null && current != null) {
+    const weeks = (now - start) / (7 * DAY);
+    if (weeks > 0) ratePerWeek = (current - from) / weeks;
+    if (due != null && points.length >= 2 && now > start) {
+      const slope = (current - from) / (now - start); // value per ms
+      projected = current + slope * (due - now);
+    }
   }
 
-  return { type: 'reach', current, target, baseline, pct, status, done: status === 'achieved' || status === 'missed' };
+  const daysLeft = due == null ? null : Math.ceil((due - now) / DAY);
+  return { points, baseline, target, start, due, current, projected, ratePerWeek, daysLeft };
 }
 
 function earliestTs(entries) {
