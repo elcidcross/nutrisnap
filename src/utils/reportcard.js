@@ -79,19 +79,19 @@ function isoWeekParts(ts) {
   return { year, week };
 }
 
-// Report cards are labelled by year + week number (e.g. "2026 Week 24"). Our weeks
-// start Sunday, so we read it off that week's Thursday — each Sunday→Saturday span
-// holds exactly one Thursday, giving stable, consecutive numbering.
+// Report cards are labelled by week number (e.g. "Week 24"). Our weeks start Sunday,
+// so we read it off that week's Thursday — each Sunday→Saturday span holds exactly
+// one Thursday, giving stable, consecutive numbering.
 export function weekLabel(weekStart) {
-  const { year, week } = isoWeekParts(weekStart + 4 * DAY);
-  return `${year} Week ${week}`;
+  const { week } = isoWeekParts(weekStart + 4 * DAY);
+  return `Week ${week}`;
 }
 
-// Date range of a week, e.g. "Jun 8 – 14" — shown as a card subtitle.
+// Full date range of a week with year, e.g. "May 10 – May 16, 2026" — the subtitle.
 export function weekRange(weekStart) {
   const end = weekEndOf(weekStart) - DAY;
   const f = t => new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  return `${f(weekStart)} – ${f(end)}`;
+  return `${f(weekStart)} – ${f(end)}, ${new Date(weekStart).getFullYear()}`;
 }
 
 // The most recent `n` week starts, newest first.

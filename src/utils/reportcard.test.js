@@ -139,9 +139,10 @@ describe('reportCardFor', () => {
     expect(reportCardFor(WEEK_START, ctx).overall.letter).toBe('A');
   });
 
-  test('label is the ISO year + week number', () => {
+  test('label is the week number; range carries the year', () => {
     const card = reportCardFor(WEEK_START, { entriesByApp: {} });
-    expect(card.label).toMatch(/^\d{4} Week \d{1,2}$/);
+    expect(card.label).toMatch(/^Week \d{1,2}$/);
+    expect(card.range).toMatch(/^[A-Z][a-z]{2} \d{1,2} – [A-Z][a-z]{2} \d{1,2}, \d{4}$/);
   });
 });
 

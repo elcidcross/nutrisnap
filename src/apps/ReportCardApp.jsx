@@ -235,20 +235,18 @@ function ReportCardHero({ week, notes, loadNote, refreshNote, open, onToggle }) 
       background: MANILA, border: `1px solid ${MANILA_EDGE}`,
       boxShadow: '0 10px 26px rgba(120,100,40,.18)', padding: '22px 22px 18px',
     }}>
-      {/* header */}
-      <div>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '2px', color: '#8a7f55', textTransform: 'uppercase' }}>Report Card</div>
-        <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4, color: INK }}>{week.label}</div>
-        <div style={{ fontSize: 12, color: '#9a8f63', marginTop: 1 }}>{week.range}</div>
-      </div>
-
-      {/* grade — big and bold, no circle */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '8px 0 12px' }}>
-        <div style={{ fontSize: grade.length > 1 ? 72 : 88, fontWeight: 800, color: ink, lineHeight: 1, letterSpacing: '-1px', textShadow: '0 1px 1px rgba(255,255,255,.5)' }}>{grade}</div>
+      {/* header — title left, overall grade top-right (where Share used to be) */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '2px', color: '#8a7f55', textTransform: 'uppercase' }}>Report Card</div>
+          <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4, color: INK }}>{week.label}</div>
+          <div style={{ fontSize: 12, color: '#9a8f63', marginTop: 1 }}>{week.range}</div>
+        </div>
+        <div style={{ fontSize: grade.length > 1 ? 48 : 58, fontWeight: 800, color: ink, lineHeight: 1, letterSpacing: '-1px', textShadow: '0 1px 1px rgba(255,255,255,.5)', flexShrink: 0, marginTop: -2 }}>{grade}</div>
       </div>
 
       {/* transcript */}
-      <div style={{ background: 'rgba(255,253,245,.55)', borderRadius: 12, padding: '2px 14px', border: '1px solid rgba(180,160,90,.18)' }}>
+      <div style={{ marginTop: 16, background: 'rgba(255,253,245,.55)', borderRadius: 12, padding: '2px 14px', border: '1px solid rgba(180,160,90,.18)' }}>
         {subjects.map((it, i) => <SubjectRow key={it.key} item={it} last={i === subjects.length - 1} />)}
       </div>
 
@@ -438,7 +436,7 @@ function TeacherRow({ teacher, note, isOpen, onToggle, onLoad, onRefresh }) {
   const error = note && note.error;
   const toggle = () => { if (!isOpen) onLoad(); onToggle(); };
   return (
-    <div style={{ borderTop: '1px solid rgba(150,130,70,.18)', padding: '9px 0' }}>
+    <div style={{ borderTop: '1px solid rgba(150,130,70,.18)', padding: '3px 0 8px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <button onClick={toggle} aria-label={isOpen ? 'Collapse comment' : 'View comment'}
           style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }}>
